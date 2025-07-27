@@ -1,0 +1,3 @@
+#!/bin/bash
+gcc -Iinclude src/*.c -o main_cyon `pkg-config --cflags --libs gtk+-3.0`;
+gcc -Iinclude cli/cyon_cli.c -o cyon_cli;
