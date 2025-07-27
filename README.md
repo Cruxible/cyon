@@ -20,6 +20,7 @@ Install the following packages before compiling:
 
 ```bash
 sudo apt update
+sudo apt install yt-dlp
 sudo apt install build-essential libgtk-3-dev pkg-config curl
 
 🛠️ Building
