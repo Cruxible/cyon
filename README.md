@@ -9,8 +9,7 @@
 - ✅ GTK 3 GUI with buttons, dialogs, and download functionality  
 - ✅ MP3/MP4 and file downloading using `yt-dlp` and `curl`  
 - ✅ Standalone CLI with styled shell prompt  
-- ✅ Modular design for extending tools and utilities  
-- ✅ Save notes from the GUI  
+- ✅ Modular design for extending tools and utilities
 - ✅ Cross-platform (Linux-focused)
 
 ---
