@@ -84,6 +84,10 @@ int main(int argc, char *argv[]) {
     g_signal_connect(security_item, "activate", G_CALLBACK(show_security), NULL);
     g_signal_connect(cli_item, "activate", G_CALLBACK(launch_cli), NULL);
 
+    // Add a label for aesthetics
+    GtkWidget *label = gtk_label_new("Welcome to Cyon!");
+    gtk_box_pack_start(GTK_BOX(vbox), label, TRUE, TRUE, 10);
+
     // Show everything
     gtk_widget_show_all(window);
     gtk_main();
