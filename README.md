@@ -1,6 +1,6 @@
 # 🌀 Cyon
 
-**Cyon** is a hybrid GTK and CLI-based desktop tool built in C, designed to provide fast and simple utilities like file downloading (MP3, MP4, general files), custom tools, and a styled terminal interface for extended control. It is lightweight, hacker-themed, and extensible. Currently under Development.
+**Cyon** is a hybrid GTK and CLI-based desktop tool built in C, designed to provide fast and simple utilities like file downloading (MP3, MP4, general files), custom tools, and a styled terminal interface for extended control. It is lightweight, hacker-themed, and extensible. Currently under Development. Sorry if it was boke for a bit. Fixed now.
 
 ---
 
