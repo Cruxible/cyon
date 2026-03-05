@@ -1,0 +1,901 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cyon — Documentation</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&display=swap');
+
+:root {
+  --green:    #00ff99;
+  --green-dim:#00cc77;
+  --cyan:     #00e5ff;
+  --amber:    #E8A020;
+  --red:      #ff3355;
+  --bg:       #0a0a0f;
+  --bg2:      #0d0d15;
+  --bg3:      #05050a;
+  --border:   #1a2a20;
+  --border-c: rgba(0,255,153,0.2);
+  --text:     #b0d8c0;
+  --text-dim: #4a7a5a;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 14px;
+  line-height: 1.7;
+  min-height: 100vh;
+}
+
+/* Scanlines */
+body::before {
+  content:'';
+  position:fixed; inset:0;
+  background: repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,0,0,0.06) 3px, rgba(0,0,0,0.06) 4px);
+  pointer-events:none; z-index:999;
+}
+
+/* Grid */
+body::after {
+  content:'';
+  position:fixed; inset:0;
+  background-image:
+    linear-gradient(rgba(0,255,153,0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,255,153,0.025) 1px, transparent 1px);
+  background-size: 32px 32px;
+  pointer-events:none; z-index:0;
+}
+
+/* ── Layout ── */
+.layout {
+  display: flex;
+  min-height: 100vh;
+  position: relative;
+  z-index:1;
+}
+
+/* ── Sidebar ── */
+nav {
+  width: 220px;
+  flex-shrink:0;
+  background: var(--bg2);
+  border-right: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  padding: 24px 0 40px;
+  display:flex;
+  flex-direction:column;
+}
+
+.nav-logo {
+  font-family: 'VT323', monospace;
+  font-size: 28px;
+  color: var(--green);
+  text-shadow: 0 0 18px rgba(0,255,153,0.6);
+  letter-spacing: 6px;
+  padding: 0 18px 20px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+}
+
+.nav-logo span { color: var(--cyan); }
+
+nav a {
+  display: block;
+  padding: 7px 18px;
+  color: var(--text-dim);
+  text-decoration: none;
+  font-size: 12px;
+  letter-spacing: 1px;
+  border-left: 2px solid transparent;
+  transition: all 0.15s;
+}
+
+nav a:hover, nav a.active {
+  color: var(--green);
+  border-left-color: var(--green);
+  background: rgba(0,255,153,0.05);
+}
+
+.nav-section {
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 3px;
+  padding: 14px 18px 4px;
+  opacity: 0.5;
+}
+
+/* ── Main content ── */
+main {
+  flex: 1;
+  padding: 40px 52px 80px;
+  max-width: 860px;
+}
+
+/* ── Header ── */
+.page-header {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 28px;
+  margin-bottom: 48px;
+}
+
+.page-header .eyebrow {
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 4px;
+  margin-bottom: 10px;
+}
+
+h1 {
+  font-family: 'VT323', monospace;
+  font-size: 58px;
+  color: var(--green);
+  text-shadow: 0 0 30px rgba(0,255,153,0.5);
+  letter-spacing: 8px;
+  line-height:1;
+}
+
+h1 span { color: var(--cyan); }
+
+.page-header .tagline {
+  margin-top: 10px;
+  color: var(--text-dim);
+  font-size: 13px;
+  letter-spacing: 1px;
+}
+
+.badge {
+  display: inline-block;
+  background: rgba(232,160,32,0.12);
+  border: 1px solid var(--amber);
+  color: var(--amber);
+  font-size: 10px;
+  letter-spacing: 2px;
+  padding: 2px 8px;
+  border-radius: 2px;
+  margin-top: 10px;
+}
+
+/* ── Section headings ── */
+h2 {
+  font-size: 18px;
+  color: var(--green);
+  letter-spacing: 3px;
+  margin: 44px 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+h2::before {
+  content: '▸';
+  color: var(--cyan);
+}
+
+h2::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+  margin-left: 10px;
+}
+
+h3 {
+  font-size: 14px;
+  color: var(--cyan);
+  letter-spacing: 2px;
+  margin: 24px 0 10px;
+}
+
+h3::before { content: '// '; color: var(--text-dim); }
+
+p {
+  color: var(--text);
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+/* ── Code blocks ── */
+.code-block {
+  background: var(--bg3);
+  border: 1px solid var(--border-c);
+  border-left: 3px solid var(--green);
+  border-radius: 3px;
+  padding: 16px 18px;
+  margin: 14px 0;
+  position: relative;
+  font-size: 13px;
+  line-height: 1.9;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.code-block .c  { color: var(--text-dim); }   /* comment */
+.code-block .g  { color: var(--green); }       /* command */
+.code-block .cy { color: var(--cyan); }        /* cyan accent */
+.code-block .am { color: var(--amber); }       /* flag/value */
+.code-block .rd { color: var(--red); }         /* warning/red */
+.code-block .wh { color: #e0f0e8; }            /* white value */
+
+.copy-btn {
+  position: absolute;
+  top: 10px; right: 10px;
+  background: transparent;
+  border: 1px solid var(--border-c);
+  color: var(--text-dim);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  padding: 2px 7px;
+  letter-spacing: 1px;
+  cursor: pointer;
+  border-radius: 2px;
+  transition: all 0.2s;
+}
+.copy-btn:hover { color: var(--green); border-color: var(--green); }
+
+/* ── Tables ── */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 14px 0;
+  font-size: 12px;
+}
+
+th {
+  text-align: left;
+  color: var(--green);
+  letter-spacing: 2px;
+  font-size: 11px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-c);
+  background: rgba(0,255,153,0.04);
+}
+
+td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  vertical-align: top;
+}
+
+tr:hover td { background: rgba(0,255,153,0.03); }
+
+td:first-child { color: var(--cyan); white-space: nowrap; }
+
+td .desc { color: var(--text-dim); font-size: 12px; }
+
+/* ── Info boxes ── */
+.info {
+  background: rgba(0,255,153,0.05);
+  border-left: 3px solid var(--green);
+  padding: 12px 16px;
+  margin: 14px 0;
+  font-size: 12px;
+  border-radius: 0 3px 3px 0;
+}
+
+.info strong { color: var(--green); letter-spacing: 2px; display:block; margin-bottom:4px; font-size:10px; }
+
+.warn {
+  background: rgba(255,51,85,0.06);
+  border-left: 3px solid var(--red);
+  padding: 12px 16px;
+  margin: 14px 0;
+  font-size: 12px;
+  border-radius: 0 3px 3px 0;
+}
+
+.warn strong { color: var(--red); letter-spacing: 2px; display:block; margin-bottom:4px; font-size:10px; }
+
+.amber-box {
+  background: rgba(232,160,32,0.06);
+  border-left: 3px solid var(--amber);
+  padding: 12px 16px;
+  margin: 14px 0;
+  font-size: 12px;
+  border-radius: 0 3px 3px 0;
+}
+
+.amber-box strong { color: var(--amber); letter-spacing:2px; display:block; margin-bottom:4px; font-size:10px; }
+
+/* ── Process map ── */
+.process-map {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 18px 0;
+}
+
+.proc-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 12px 0;
+  border-left: 1px solid var(--border-c);
+  padding-left: 20px;
+  position: relative;
+}
+
+.proc-step::before {
+  content: '';
+  position: absolute;
+  left: -5px;
+  top: 18px;
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green);
+}
+
+.proc-num {
+  font-size: 10px;
+  color: var(--text-dim);
+  min-width: 24px;
+  padding-top: 2px;
+}
+
+.proc-body { flex: 1; }
+.proc-title { color: var(--green); font-size: 13px; margin-bottom: 3px; }
+.proc-desc { color: var(--text-dim); font-size: 12px; }
+
+/* ── Marquee banner (matches real cyon) ── */
+.marquee-strip {
+  background: var(--bg3);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 6px 0;
+  overflow: hidden;
+  margin: 40px -52px;
+}
+
+.marquee-inner {
+  display: inline-block;
+  white-space: nowrap;
+  animation: scroll-left 30s linear infinite;
+  color: var(--green);
+  font-size: 13px;
+  letter-spacing: 2px;
+}
+
+@keyframes scroll-left {
+  from { transform: translateX(100vw); }
+  to   { transform: translateX(-100%); }
+}
+
+/* ── Architecture diagram ── */
+.arch {
+  background: var(--bg3);
+  border: 1px solid var(--border-c);
+  border-radius: 3px;
+  padding: 22px;
+  margin: 14px 0;
+  font-size: 12px;
+  line-height: 2;
+}
+
+.arch .box {
+  display: inline-block;
+  border: 1px solid var(--green);
+  color: var(--green);
+  padding: 2px 10px;
+  border-radius: 2px;
+  font-size: 11px;
+  letter-spacing: 1px;
+}
+
+.arch .box.cyan { border-color: var(--cyan); color: var(--cyan); }
+.arch .box.amber { border-color: var(--amber); color: var(--amber); }
+.arch .arr { color: var(--text-dim); margin: 0 6px; }
+
+/* ── Footer ── */
+footer {
+  margin-top: 60px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 11px;
+  letter-spacing: 1px;
+}
+
+/* ── Responsive ── */
+@media (max-width: 720px) {
+  nav { display: none; }
+  main { padding: 24px 20px 60px; }
+  .marquee-strip { margin: 30px -20px; }
+}
+</style>
+</head>
+<body>
+<div class="layout">
+
+<!-- ── SIDEBAR ── -->
+<nav>
+  <div class="nav-logo">▸ <span>C</span>YON</div>
+  <span class="nav-section">OVERVIEW</span>
+  <a href="#what-is-cyon">What is Cyon</a>
+  <a href="#architecture">Architecture</a>
+  <a href="#how-it-works">How It Works</a>
+
+  <span class="nav-section">INSTALL</span>
+  <a href="#dependencies">Dependencies</a>
+  <a href="#building">Building</a>
+  <a href="#ollama-setup">Ollama + Llama 3</a>
+  <a href="#modelfile">Modelfile</a>
+  <a href="#running">Running</a>
+
+  <span class="nav-section">REFERENCE</span>
+  <a href="#programs-menu">Programs Menu</a>
+  <a href="#commands">CLI Commands</a>
+  <a href="#pyra-lib">pyra_lib Tools</a>
+  <a href="#gtk-lib">gtk_lib Tools</a>
+
+  <span class="nav-section">MANAGE</span>
+  <a href="#compile-menu">compile_cyon Menu</a>
+  <a href="#uninstall">Uninstall</a>
+</nav>
+
+<!-- ── MAIN ── -->
+<main>
+
+  <!-- HEADER -->
+  <div class="page-header">
+    <div class="eyebrow">// DOCUMENTATION</div>
+    <h1>▸ <span>C</span>YON</h1>
+    <p class="tagline">Hybrid GTK + CLI desktop tool — C / Python / Ollama / Discord</p>
+    <div class="badge">⚠ ACTIVE DEVELOPMENT</div>
+  </div>
+
+  <!-- WHAT IS CYON -->
+  <section id="what-is-cyon">
+    <h2>What is Cyon</h2>
+    <p>Cyon is a lightweight, hacker-themed desktop control panel built in C with GTK 3. It runs a persistent GTK window that manages background processes, provides a command input, and launches a suite of Python utility tools. It is designed to be fast, modular, and extendable — living entirely inside <code>~/cyon/</code>.</p>
+
+    <p>At its core, Cyon is a <strong>process manager</strong>: it spawns and controls three key services from a single UI — the Ollama LLM server, the local AI chatbot, and a Discord bot — all wired to a shared log view and input field.</p>
+
+    <div class="info">
+      <strong>// DESIGN PHILOSOPHY</strong>
+      No bloat. No Electron. Compiled C binary with GTK for the window, Python for scriptable tools, Ollama for local AI. Everything runs on your machine.
+    </div>
+  </section>
+
+  <!-- ARCHITECTURE -->
+  <section id="architecture">
+    <h2>Architecture</h2>
+
+    <div class="arch">
+<span class="box">main_cyon</span> <span class="arr">──spawns──▶</span> <span class="box cyan">cyon_shell.py</span>   <span style="color:var(--text-dim)">← command processor (auto-started)</span>
+<span class="box">main_cyon</span> <span class="arr">──spawns──▶</span> <span class="box cyan">cyon_local.py</span>   <span style="color:var(--text-dim)">← local Llama 3 chatbot</span>
+<span class="box">main_cyon</span> <span class="arr">──spawns──▶</span> <span class="box cyan">cyon_bot.py</span>     <span style="color:var(--text-dim)">← Discord bot</span>
+<span class="box">main_cyon</span> <span class="arr">──spawns──▶</span> <span class="box amber">ollama serve</span>    <span style="color:var(--text-dim)">← LLM inference server</span>
+
+<span style="color:var(--text-dim)">All processes pipe stdout → GTK log view via reader threads</span>
+<span style="color:var(--text-dim)">Input field → shell_stdin (commands) + local_stdin (chat)</span>
+
+<span class="box">cyon_cli</span>  <span class="arr">──────────</span> <span style="color:var(--text-dim)">standalone CLI (launched in terminal)</span>
+<span class="box">watcher</span>   <span class="arr">──────────</span> <span style="color:var(--text-dim)">filesystem monitor (security)</span>
+<span class="box">cyon_netscan</span> <span class="arr">─────</span> <span style="color:var(--text-dim)">network scanner</span>
+    </div>
+
+    <p>All Python processes run inside <code>~/pyra_env</code> — a dedicated virtual environment with system-site-packages enabled so GTK bindings (which can't be pip-installed) are available alongside pip packages.</p>
+  </section>
+
+  <!-- HOW IT WORKS -->
+  <section id="how-it-works">
+    <h2>How It Works</h2>
+
+    <div class="process-map">
+      <div class="proc-step">
+        <span class="proc-num">01</span>
+        <div class="proc-body">
+          <div class="proc-title">GTK Window Launches</div>
+          <div class="proc-desc"><code>./bin/main_cyon</code> initialises GTK, applies the dark CSS theme, creates the menu bar and control panel, then auto-starts <code>cyon_shell.py</code> via <code>g_spawn_async_with_pipes</code>.</div>
+        </div>
+      </div>
+      <div class="proc-step">
+        <span class="proc-num">02</span>
+        <div class="proc-body">
+          <div class="proc-title">Shell Process (always-on)</div>
+          <div class="proc-desc"><code>cyon_shell.py</code> runs immediately on startup. All text from the input field is sent to its stdin. It handles slash-commands like <code>/clear</code>, <code>/bye</code>, <code>/pyra</code>, <code>/term</code> etc. and echoes output back to the GTK log.</div>
+        </div>
+      </div>
+      <div class="proc-step">
+        <span class="proc-num">03</span>
+        <div class="proc-body">
+          <div class="proc-title">Ollama Server (manual start)</div>
+          <div class="proc-desc">Click <strong>START</strong> next to OLLAMA SERVER to spawn <code>ollama serve</code>. This starts the local LLM inference server on <code>localhost:11434</code>. Status label switches to ONLINE. Required before LOCAL CYON can answer queries.</div>
+        </div>
+      </div>
+      <div class="proc-step">
+        <span class="proc-num">04</span>
+        <div class="proc-body">
+          <div class="proc-title">Local Chatbot (manual start)</div>
+          <div class="proc-desc"><code>cyon_local.py</code> connects to Ollama and uses the Llama 3 model. Non-command text typed in the input field is forwarded to its stdin. Replies appear in the GTK log view tagged in cyan.</div>
+        </div>
+      </div>
+      <div class="proc-step">
+        <span class="proc-num">05</span>
+        <div class="proc-body">
+          <div class="proc-title">Discord Bot (manual start)</div>
+          <div class="proc-desc"><code>cyon_bot.py</code> connects to Discord via your bot token and relays messages through Ollama. Start after Ollama is running. Logs appear in the GTK log view.</div>
+        </div>
+      </div>
+      <div class="proc-step">
+        <span class="proc-num">06</span>
+        <div class="proc-body">
+          <div class="proc-title">Reader Threads</div>
+          <div class="proc-desc">Each process gets a dedicated GLib reader thread that continuously reads stdout and posts lines to the GTK log via <code>g_idle_add</code> — keeping the UI thread safe and responsive.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="marquee-strip">
+    <span class="marquee-inner">▸ CYON ONLINE. REALITY OPTIONAL. &nbsp;&nbsp;&nbsp; ▸ OLLAMA STANDING BY. &nbsp;&nbsp;&nbsp; ▸ ROUTING THROUGH THE SHADOW REALM... &nbsp;&nbsp;&nbsp; ▸ ALL SYSTEMS... PROBABLY FINE. &nbsp;&nbsp;&nbsp; ▸ THE HORRORS PERSIST, BUT SO DO I. &nbsp;&nbsp;&nbsp; ▸ BYTES GO BRRR... &nbsp;&nbsp;&nbsp; ▸ LOCAL AI. NO CLOUD. NO SNITCHING. &nbsp;&nbsp;&nbsp;</span>
+  </div>
+
+  <!-- DEPENDENCIES -->
+  <section id="dependencies">
+    <h2>Dependencies</h2>
+
+    <h3>C / GTK (Core binary)</h3>
+    <div class="code-block"><button class="copy-btn" onclick="cp(this)">COPY</button><span class="g">sudo apt update && sudo apt upgrade -y</span>
+<span class="g">sudo apt install -y</span> <span class="am">build-essential libgtk-3-dev pkg-config curl yt-dlp ffmpeg</span></div>
+
+    <table>
+      <tr><th>Package</th><th>Why Cyon Needs It</th></tr>
+      <tr><td>build-essential</td><td>GCC compiler + make — compiles all C binaries</td></tr>
+      <tr><td>libgtk-3-dev</td><td>GTK 3 headers and libs — the entire GUI layer</td></tr>
+      <tr><td>pkg-config</td><td>Resolves GTK compile flags (<code>--cflags --libs gtk+-3.0</code>)</td></tr>
+      <tr><td>curl</td><td>General file downloads from the Downloader menu</td></tr>
+      <tr><td>yt-dlp</td><td>MP3/MP4 downloading via YouTube and other sites</td></tr>
+      <tr><td>ffmpeg</td><td>Audio/video processing — used by editor tools and yt-dlp; plays the intro sound via <code>ffplay</code></td></tr>
+    </table>
+
+    <h3>Python / GTK bindings</h3>
+    <div class="code-block"><button class="copy-btn" onclick="cp(this)">COPY</button><span class="c"># Must be apt-installed — pip cannot provide these</span>
+<span class="g">sudo apt install -y</span> <span class="am">python3-gi python3-gi-cairo gir1.2-gtk-3.0</span></div>
+
+    <table>
+      <tr><th>Package</th><th>Why Cyon Needs It</th></tr>
+      <tr><td>python3-gi</td><td>PyGObject — lets Python scripts use GTK/GLib APIs (required by gtk_lib tools)</td></tr>
+      <tr><td>python3-gi-cairo</td><td>Cairo rendering support for GTK Python apps</td></tr>
+      <tr><td>gir1.2-gtk-3.0</td><td>GObject introspection data for GTK 3 — needed by PyGObject at runtime</td></tr>
+    </table>
+
+    <h3>pyra_env pip packages</h3>
+    <div class="code-block"><button class="copy-btn" onclick="cp(this)">COPY</button><span class="c"># Installed automatically by compile_cyon option 2</span>
+<span class="g">pip3 install</span> <span class="am">pyfiglet moviepy rich pillow cryptography pyautogui</span></div>
+
+    <table>
+      <tr><th>Package</th><th>Used By</th></tr>
+      <tr><td>pyfiglet</td><td>figlet_tools.py — ASCII art text generator</td></tr>
+      <tr><td>moviepy</td><td>All gtk_lib editor tools (cut, merge, concat, extract, volume)</td></tr>
+      <tr><td>rich</td><td>pyra_toolz — styled terminal output</td></tr>
+      <tr><td>pillow</td><td>image_converter.py, shift_image.py, ascii_art.py</td></tr>
+      <tr><td>cryptography</td><td>file_encryptor.py, tarmaker.py — encryption/decryption</td></tr>
+      <tr><td>pyautogui</td><td>pyra_repeater.py — automated input (use with care)</td></tr>
+    </table>
+
+    <h3>Ollama + Llama 3</h3>
+    <div class="code-block"><button class="copy-btn" onclick="cp(this)">COPY</button><span class="c"># Install Ollama</span>
+<span class="g">curl -fsSL</span> https://ollama.com/install.sh <span class="g">|</span> sh
+
+<span class="c"># Pull Llama 3 model</span>
+<span class="g">ollama pull</span> <span class="am">llama3</span>
+
+<span class="c"># Verify it works</span>
+<span class="g">ollama run</span> <span class="am">llama3</span> <span class="wh">"hello"</span></div>
+
+    <h3>Discord bot (optional)</h3>
+    <div class="code-block"><button class="copy-btn" onclick="cp(this)">COPY</button><span class="c"># Inside pyra_env</span>
+<span class="g">source</span> ~/pyra_env/bin/activate
+<span class="g">pip3 install</span> <span class="am">discord.py</span>
+<span class="g">deactivate</span></div>
+
+    <div class="info">
+      <strong>// BOT TOKEN</strong>
+      Add your Discord bot token to <code>cyon_bot.py</code>. Create a bot at discord.com/developers → New Application → Bot → copy token.
+    </div>
+  </section>
+
+  <!-- BUILDING -->
+  <section id="building">
+    <h2>Building</h2>
+
+    <p>All build steps are handled by <code>compile_cyon</code>. Make it executable and run it:</p>
+
+    <div class="code-block"><button class="copy-btn" onclick="cp(this)">COPY</button><span class="g">chmod +x</span> ~/cyon/compile_cyon
+<span class="g">cd</span> ~/cyon
+<span class="g">./compile_cyon</span></div>
+
+    <p>For a fresh full install, choose option <strong>5 — Compile all</strong>. This runs all steps in sequence:</p>
+
+    <div class="process-map">
+      <div class="proc-step"><span class="proc-num">①</span><div class="proc-body"><div class="proc-title">Install apt dependencies</div><div class="proc-desc">build-essential, libgtk-3-dev, pkg-config, curl, yt-dlp, ffmpeg, python3-gi, python3-gi-cairo, gir1.2-gtk-3.0</div></div></div>
+      <div class="proc-step"><span class="proc-num">②</span><div class="proc-body"><div class="proc-title">Compile C binaries → bin/</div><div class="proc-desc">main_cyon (GTK app), cyon_cli (standalone shell), watcher (fs monitor), cyon_netscan (network scanner)</div></div></div>
+      <div class="proc-step"><span class="proc-num">③</span><div class="proc-body"><div class="proc-title">Create ~/pyra_env</div><div class="proc-desc">Python venv with --system-site-packages so GTK bindings work alongside pip packages</div></div></div>
+      <div class="proc-step"><span class="proc-num">④</span><div class="proc-body"><div class="proc-title">Compile pyra_toolz (Linux binary)</div><div class="proc-desc">Uses PyInstaller in a temp venv — output goes to ~/cyon/pyra_tool/pyra_toolz</div></div></div>
+      <div class="proc-step"><span class="proc-num">⑤</span><div class="proc-body"><div class="proc-title">Install .desktop launcher</div><div class="proc-desc">Creates ~/.local/share/applications/cyon.desktop so Cyon appears in your app menu</div></div></div>
+    </div>
+
+    <h3>Manual compilation commands</h3>
+    <div class="code-block"><button class="copy-btn" onclick="cp(this)">COPY</button><span class="c"># GTK desktop app (links all src/*.c)</span>
+<span class="g">gcc</span> <span class="am">-Iinclude src/*.c -o bin/main_cyon</span> `pkg-config --cflags --libs gtk+-3.0` <span class="am">-lpthread</span>
+
+<span class="c"># CLI shell</span>
+<span class="g">gcc</span> <span class="am">-Iinclude cli/cyon_cli.c -o bin/cyon_cli</span>
+
+<span class="c"># Filesystem watcher</span>
+<span class="g">gcc</span> <span class="am">-Iinclude -o bin/watcher cli/watcher.c</span>
+
+<span class="c"># Network scanner</span>
+<span class="g">gcc</span> <span class="am">-Iinclude cli/cyon_netscan.c -o bin/cyon_netscan</span></div>
+  </section>
+
+  <!-- OLLAMA SETUP -->
+  <section id="ollama-setup">
+    <h2>Ollama + Llama 3 Setup</h2>
+
+    <p>Cyon uses Ollama to run Llama 3 locally — no API key, no cloud, no data leaving your machine. The GTK control panel manages the <code>ollama serve</code> process directly.</p>
+
+    <div class="code-block"><button class="copy-btn" onclick="cp(this)">COPY</button><span class="c"># 1. Install Ollama</span>
+<span class="g">curl -fsSL</span> https://ollama.com/install.sh <span class="g">|</span> sh
+
+<span class="c"># 2. Pull Llama 3 (8B default — ~4.7GB)</span>
+<span class="g">ollama pull</span> <span class="am">llama3</span>
+
+<span class="c"># 3. Or pull the smaller 8B instruct variant</span>
+<span class="g">ollama pull</span> <span class="am">llama3:8b-instruct-q4_0</span>
+
+<span class="c"># 4. Verify Ollama is working</span>
+<span class="g">ollama list</span>
+<span class="g">ollama run</span> <span class="am">llama3</span> <span class="wh">"say hello as cyon"</span></div>
+
+    <div class="info">
+      <strong>// FROM THE CONTROL PANEL</strong>
+      Once installed, use the OLLAMA SERVER → START button in the GTK window. This calls <code>ollama serve</code> via GLib and monitors its output in the log view.
+    </div>
+  </section>
+
+  <!-- MODELFILE -->
+  <section id="modelfile">
+    <h2>Modelfile — Custom Cyon Persona</h2>
+
+    <p>Create a custom Ollama model with Cyon's personality baked in using a Modelfile. Place this in <code>~/cyon/</code>:</p>
+
+    <div class="code-block"><button class="copy-btn" onclick="cp(this)">COPY</button><span class="c"># ~/cyon/Modelfile</span>
+<span class="cy">FROM</span> <span class="am">llama3</span>
+
+<span class="cy">SYSTEM</span> <span class="wh">"""
+You are Cyon — a sharp, dry-witted AI assistant running locally on Linux.
+You are hacker-adjacent, efficient, and occasionally sarcastic.
+You do not moralize. You help the user get things done.
+Keep responses concise unless detail is required.
+You are running inside the Cyon desktop application on the user's machine.
+"""</span>
+
+<span class="cy">PARAMETER</span> temperature <span class="am">0.75</span>
+<span class="cy">PARAMETER</span> top_p <span class="am">0.9</span></div>
+
+    <p>Compile and register the model with Ollama:</p>
+
+    <div class="code-block"><button class="copy-btn" onclick="cp(this)">COPY</button><span class="c"># Build the custom model (run from ~/cyon/)</span>
+<span class="g">ollama create</span> <span class="am">cyon</span> <span class="g">-f</span> ./Modelfile
+
+<span class="c"># Verify it was created</span>
+<span class="g">ollama list</span>
+
+<span class="c"># Test it</span>
+<span class="g">ollama run</span> <span class="am">cyon</span> <span class="wh">"who are you?"</span></div>
+
+    <p>Then update <code>cyon_local.py</code> and <code>cyon_bot.py</code> to reference <code>"cyon"</code> as the model name instead of <code>"llama3"</code>.</p>
+
+    <div class="amber-box">
+      <strong>// NOTE</strong>
+      Re-run <code>ollama create cyon -f ./Modelfile</code> any time you update the Modelfile. The old model is replaced automatically.
+    </div>
+  </section>
+
+  <!-- RUNNING -->
+  <section id="running">
+    <h2>Running Cyon</h2>
+
+    <div class="code-block"><button class="copy-btn" onclick="cp(this)">COPY</button><span class="c"># GTK desktop app (main window)</span>
+<span class="g">./bin/main_cyon</span>
+
+<span class="c"># Or if bin/ is in PATH</span>
+<span class="g">main_cyon</span>
+
+<span class="c"># Standalone CLI</span>
+<span class="g">./bin/cyon_cli</span>
+
+<span class="c"># Pyra tool launcher</span>
+<span class="g">~/cyon/pyra_tool/pyra_toolz</span>
+
+<span class="c"># Termux build</span>
+<span class="g">~/cyon/pyra_tool/pyra_termux</span></div>
+
+    <div class="info">
+      <strong>// PATH SHORTCUT</strong>
+      Run option 6 in <code>compile_cyon</code> to add <code>~/cyon/bin</code> and <code>~/cyon/pyra_tool</code> to your PATH in <code>~/.bashrc</code>. After that, just type <code>main_cyon</code> or <code>cyon_cli</code> from anywhere.
+    </div>
+  </section>
+
+  <!-- PROGRAMS MENU -->
+  <section id="programs-menu">
+    <h2>Programs Menu</h2>
+    <table>
+      <tr><th>Menu Path</th><th>What It Does</th></tr>
+      <tr><td>Pyra Player</td><td>Launches <code>pyra_player.py</code> — GTK media player</td></tr>
+      <tr><td>Downloader</td><td>GTK download dialog — MP3, MP4, or general file via yt-dlp/curl</td></tr>
+      <tr><td>Cyon CLI</td><td>Opens <code>bin/cyon_cli</code> in a terminal (tries mate-terminal, gnome-terminal, xterm, etc.)</td></tr>
+      <tr><td>Pyra CLI</td><td>Launches <code>pyra_toolz</code> in a terminal window</td></tr>
+      <tr><td>Tools → Editor Tools → Cut Video</td><td>Trim a video to start/end time → MP4</td></tr>
+      <tr><td>Tools → Editor Tools → Extract Audio</td><td>Pull audio track from video → MP3</td></tr>
+      <tr><td>Tools → Editor Tools → Cut Audio</td><td>Trim MP3 file to start/end time</td></tr>
+      <tr><td>Tools → Editor Tools → Merge Audio/Video</td><td>Combine separate audio + video → MP4</td></tr>
+      <tr><td>Tools → Editor Tools → Adjust Volume</td><td>Volume slider for MP3 files</td></tr>
+      <tr><td>Tools → Editor Tools → Stitch Videos</td><td>Concatenate two video files → MP4</td></tr>
+      <tr><td>Tools → Editor Tools → Stitch Audio</td><td>Concatenate two audio files → MP3</td></tr>
+      <tr><td>Tools → Convert Pics</td><td>GTK image format converter</td></tr>
+      <tr><td>Tools → Create Tarfile</td><td>Create, encrypt, decrypt tarballs</td></tr>
+      <tr><td>Tools → Cyon TTS</td><td>GTK text-to-speech interface (Piper)</td></tr>
+      <tr><td>Security → Defense → Watcher</td><td>Toggle filesystem watcher (toggle: kills if running)</td></tr>
+      <tr><td>Security → Defense → Firewall</td><td>Firewall controls</td></tr>
+      <tr><td>Security → Offense → Port Scanner</td><td>Network port scanner</td></tr>
+      <tr><td>Security → Offense → DNS Lookup</td><td>DNS resolution tool</td></tr>
+    </table>
+  </section>
+
+  <!-- CLI COMMANDS -->
+  <section id="commands">
+    <h2>CLI Commands (Input Field)</h2>
+    <p>These slash-commands are handled by <code>cyon_shell.py</code> and work from the GTK input field at the bottom of the window:</p>
+    <table>
+      <tr><th>Command</th><th>What It Does</th></tr>
+      <tr><td>/shutdown</td><td>Initiates full shutdown sequence</td></tr>
+      <tr><td>/bye</td><td>Graceful exit</td></tr>
+      <tr><td>/clear</td><td>Clears the log view</td></tr>
+      <tr><td>/quiet</td><td>Suppresses unsolicited output</td></tr>
+      <tr><td>/loud</td><td>Re-enables verbose output</td></tr>
+      <tr><td>/pyra</td><td>Launches pyra_toolz from the shell</td></tr>
+      <tr><td>/cyon_cli</td><td>Drops into the CLI interface</td></tr>
+      <tr><td>/term</td><td>Spawns a new terminal window</td></tr>
+      <tr><td>(any non-/ text)</td><td>Forwarded to LOCAL CYON bot if it is running</td></tr>
+    </table>
+  </section>
+
+  <!-- PYRA LIB -->
+  <section id="pyra-lib">
+    <h2>pyra_lib Tools</h2>
+    <p>Lives at <code>~/cyon/pyra_lib/</code>. Called from the Pyra launcher. All run inside <code>~/pyra_env</code>.</p>
+    <table>
+      <tr><th>Script</th><th>Description</th></tr>
+      <tr><td>pyra_shared.py</td><td>Shared utilities, input helpers, and logos used across pyra_lib</td></tr>
+      <tr><td>figlet_tools.py</td><td>ASCII font generator (pyfiglet)</td></tr>
+      <tr><td>convert_mvk.py</td><td>Converts MKV → MP4</td></tr>
+      <tr><td>tarmaker.py</td><td>Create, encrypt, decrypt tarballs</td></tr>
+      <tr><td>binary_tools.py</td><td>Binary file utilities</td></tr>
+      <tr><td>convertcsv.py</td><td>CSV conversion tool</td></tr>
+      <tr><td>csv2json.py</td><td>CSV → JSON</td></tr>
+      <tr><td>net_stress.py</td><td>Network stress testing</td></tr>
+      <tr><td>moon.py</td><td>Moon phase calculator</td></tr>
+      <tr><td>theban.py</td><td>Theban alphabet encoder/decoder</td></tr>
+      <tr><td>find_duplicates.py</td><td>Find duplicate files in a directory</td></tr>
+      <tr><td>file_encryptor.py</td><td>File encryption and decryption</td></tr>
+      <tr><td>ascii_art.py</td><td>ASCII art generator</td></tr>
+      <tr><td>image_converter.py</td><td>Image format conversion</td></tr>
+      <tr><td>shift_image.py</td><td>Image shifting and manipulation</td></tr>
+      <tr><td>conversions.py</td><td>General unit and data conversions</td></tr>
+      <tr><td>gtk_convert.py</td><td>GTK-based conversion interface</td></tr>
+      <tr><td>pyra_repeater.py</td><td>Auto-messenger via pyautogui — use carefully</td></tr>
+    </table>
+  </section>
+
+  <!-- GTK LIB -->
+  <section id="gtk-lib">
+    <h2>gtk_lib — Editor Tools</h2>
+    <p>Lives at <code>~/cyon/pyra_lib/gtk_lib/</code>. All use <code>Gtk.Application</code> and run inside <code>pyra_env</code>. Require <strong>moviepy v2+</strong>.</p>
+    <table>
+      <tr><th>Script</th><th>Description</th></tr>
+      <tr><td>cut_video.py</td><td>Trim video to start/end time → MP4</td></tr>
+      <tr><td>extract_audio.py</td><td>Extract audio from video → MP3</td></tr>
+      <tr><td>cut_audio.py</td><td>Trim audio to start/end time → MP3</td></tr>
+      <tr><td>merge_aud_vid.py</td><td>Merge audio into video → MP4</td></tr>
+      <tr><td>adjust_volume.py</td><td>Adjust MP3 volume via slider (MoviePy MultiplyVolume)</td></tr>
+      <tr><td>concat_vid.py</td><td>Stitch two videos together → MP4</td></tr>
+      <tr><td>concat_aud.py</td><td>Stitch two audio files → MP3</td></tr>
+      <tr><td>gtk_convert.py</td><td>GTK image format converter</td></tr>
+      <tr><td>tarmaker_gtk3.py</td><td>GTK tarball creator/encryptor</td></tr>
+      <tr><td>cyon_tts.py</td><td>GTK text-to-speech (Piper)</td></tr>
+      <tr><td>pyra_player.py</td><td>GTK media player</td></tr>
+      <tr><td>pyra_downloader.py</td><td>Standalone GTK YouTube/audio/video downloader (yt-dlp)</td></tr>
+    </table>
+
+    <div class="amber-box">
+      <strong>// MOVIEPY V2 NOTES</strong>
+      <code>subclip</code> → <code>subclipped</code> &nbsp;|&nbsp; <code>set_audio</code> → <code>with_audio</code> &nbsp;|&nbsp; Volume: use <code>MultiplyVolume</code> effect. All tools reflect these changes.
+    </div>
+  </section>
+
+  <!-- COMPILE MENU -->
+  <section id="compile-menu">
+    <h2>compile_cyon Menu Reference</h2>
+    <table>
+      <tr><th>Option</th><th>Action</th></tr>
+      <tr><td>1</td><td>Install apt deps + compile all C binaries + create .desktop launcher</td></tr>
+      <tr><td>2</td><td>Create ~/pyra_env + install all pip packages</td></tr>
+      <tr><td>3</td><td>Compile pyra_toolz Linux binary (uses PyInstaller in temp venv)</td></tr>
+      <tr><td>4</td><td>Compile pyra_termux binary (for Termux on Android)</td></tr>
+      <tr><td>5</td><td>Run options 1 + 2 + 3 + 4 in sequence (full install)</td></tr>
+      <tr><td>6</td><td>Add ~/cyon/bin and ~/cyon/pyra_tool to PATH in ~/.bashrc</td></tr>
+      <tr><td>7</td><td>Remove Pyra PATH block from ~/.bashrc</td></tr>
+      <tr><td>8</td><td>Uninstall Cyon (see below)</td></tr>
+      <tr><td>9</td><td>Exit</td></tr>
+    </table>
+  </section>
+
+  <!-- UNINSTALL -->
+  <section id="uninstall">
+    <h2>Uninstall</h2>
+
+    <p>Select option <strong>8</strong> in <code>compile_cyon</code>. You will be asked to confirm. The uninstaller removes:</p>
+    <table>
+      <tr><th>What</th><th>Path</th></tr>
+      <tr><td>Desktop launcher</td><td>~/.local/share/applications/cyon.desktop</td></tr>
+      <tr><td>Python virtual env</td><td>~/pyra_env</td></tr>
+      <tr><td>PATH entries</td><td>~/.bashrc (the Pyra PATH block)</td></tr>
+      <tr><td>Cyon directory</td><td>~/cyon/ (entire source + binaries)</td></tr>
+    </table>
+
+    <div class="warn">
+      <strong>// WARNING — CANNOT BE UNDONE</strong>
+      The uninstaller deletes the entire ~/cyon/ directory. Back up any scripts or configs you want to keep before running it.
+    </div>
+
+    <p>apt packages (build-essential, libgtk-3-dev, yt-dlp, etc.) are <strong>not</strong> removed automatically as they may be used by other software. Remove manually if needed:</p>
+
+    <div class="code-block"><button class="copy-btn" onclick="cp(this)">COPY</button><span class="g">sudo apt remove</span> <span class="am">build-essential libgtk-3-dev pkg-config yt-dlp ffmpeg</span></div>
+  </section>
+
+  <footer>
+    <p>▸ CYON &nbsp;|&nbsp; Author: Ioannes Cruxibulum &nbsp;|&nbsp; Linux-focused &nbsp;|&nbsp; Active development</p>
+    <p style="margin-top:6px; color:var(--text-dim)">Place this file in ~/cyon/ and open with any browser.</p>
+  </footer>
+
+</main>
+</div>
+
+<script>
+function cp(btn) {
+  const block = btn.parentElement;
+  const raw = block.innerText.replace(/^COPY\n?/, '').trim();
+  navigator.clipboard.writeText(raw).then(() => {
+    btn.textContent = 'OK ✓';
+    setTimeout(() => btn.textContent = 'COPY', 1500);
+  });
+}
+
+// Highlight active nav link on scroll
+const sections = document.querySelectorAll('section[id]');
+const navLinks = document.querySelectorAll('nav a');
+window.addEventListener('scroll', () => {
+  let cur = '';
+  sections.forEach(s => { if (window.scrollY >= s.offsetTop - 80) cur = s.id; });
+  navLinks.forEach(a => {
+    a.classList.toggle('active', a.getAttribute('href') === '#' + cur);
+  });
+}, { passive: true });
+</script>
+</body>
+</html>

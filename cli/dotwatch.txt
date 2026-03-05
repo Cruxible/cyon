@@ -1,0 +1,37 @@
+🕵️‍♂️ Dotfile Intrusion Monitor (dotwatch)
+
+dotwatch is a lightweight C tool that monitors sensitive dotfiles in your home directory for unauthorized changes using Linux’s inotify system. It watches files like .bashrc, .bash_history, .ssh/config, and .ssh/authorized_keys and logs any modifications, deletions, or creations to a local dotwatch.log file.
+🔍 Watched Files
+
+    .bashrc
+
+    .bash_history
+
+    .ssh/config
+
+    .ssh/authorized_keys
+
+    .ssh/known_hosts
+
+📂 Watched Directories
+
+    $HOME/.ssh
+
+    $HOME
+
+🛠️ Build
+
+gcc dotwatch.c -o dotwatch
+
+🚀 Usage
+
+./dotwatch
+pkill -x watcher
+
+The tool will run continuously and print/log any suspicious changes it detects.
+📓 Log Output
+
+Events are saved to dotwatch.log in the current directory or the home directory:
+.dotwatch.log
+
+[Wed Jul 31 01:23:45 2025] File .ssh/known_hosts was modified

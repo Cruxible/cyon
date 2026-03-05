@@ -1,0 +1,193 @@
+#!/bin/bash
+CYAN='\033[0;36m'
+RED='\033[0;31m'
+NC='\033[0m'
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# ------------------------
+# PATH management functions
+# ------------------------
+add_path_to_bashrc() {
+    START="# >>> Pyra Tool PATH >>>"
+    END="# <<< Pyra Tool PATH <<<"
+    if ! grep -q "$START" ~/.bashrc; then
+        echo -e "${CYAN}Adding Pyra and cyon/bin directories to PATH in ~/.bashrc${NC}"
+        cat >> ~/.bashrc <<EOF
+$START
+for dir in "\$HOME/cyon/bin" "\$HOME/cyon/pyra_tool"; do
+    if [ -d "\$dir" ]; then
+        case ":\$PATH:" in
+            *":\$dir:"*) ;;
+            *) PATH="\$PATH:\$dir" ;;
+        esac
+    fi
+done
+echo -e "\033[0;36m executables:\n cyon_cli\n pyra_toolz\n pyra_termux\033[0m"
+export PATH
+$END
+EOF
+    else
+        echo -e "${CYAN}Pyra PATH already exists in ~/.bashrc${NC}"
+    fi
+}
+remove_path_from_bashrc() {
+    START="# >>> Pyra Tool PATH >>>"
+    END="# <<< Pyra Tool PATH <<<"
+    if grep -q "$START" ~/.bashrc; then
+        echo -e "${RED}Removing Pyra PATH from ~/.bashrc${NC}"
+        sed -i "/$START/,/$END/d" ~/.bashrc
+    else
+        echo -e "${CYAN}No Pyra PATH found in ~/.bashrc${NC}"
+    fi
+}
+# ------------------------
+# Build & setup functions
+# ------------------------
+install_desktop_dependencies() {
+    echo -e "${CYAN} Installing dependencies...${NC}"
+    sudo apt update && sudo apt upgrade -y
+    sudo apt install -y build-essential libgtk-3-dev pkg-config curl yt-dlp ffmpeg
+    sudo apt install -y python3-gi python3-gi-cairo gir1.2-gtk-3.0
+}
+compile_cyon_desktop() {
+    echo -e "${CYAN} Compiling C binaries...${NC}"
+    mkdir -p "$SCRIPT_DIR/bin"
+    gcc -I"$SCRIPT_DIR/include" "$SCRIPT_DIR"/src/*.c -o "$SCRIPT_DIR/bin/main_cyon" `pkg-config --cflags --libs gtk+-3.0` -lpthread || { echo -e "${RED} Failed to compile main_cyon${NC}"; exit 1; }
+    gcc -I"$SCRIPT_DIR/include" -o "$SCRIPT_DIR/bin/cyon_cli" "$SCRIPT_DIR/cli/cyon_cli.c" || { echo -e "${RED} Failed to compile cyon_cli${NC}"; exit 1; }
+    gcc -I"$SCRIPT_DIR/include" -o "$SCRIPT_DIR/bin/watcher" "$SCRIPT_DIR/cli/watcher.c" || { echo -e "${RED} Failed to compile watcher${NC}"; exit 1; }
+    gcc -I"$SCRIPT_DIR/include" -o "$SCRIPT_DIR/bin/cyon_netscan" "$SCRIPT_DIR/cli/cyon_netscan.c" || { echo -e "${RED} Failed to compile cyon_netscan${NC}"; exit 1; }
+    mkdir -p ~/.local/share/applications
+    tee ~/.local/share/applications/cyon.desktop > /dev/null <<EOF
+[Desktop Entry]
+Type=Application
+Encoding=UTF-8
+Name=Cyon
+Comment=Cyon DE
+Exec=$SCRIPT_DIR/bin/main_cyon
+#Icon=$SCRIPT_DIR/bin/cyon.png
+Icon=$SCRIPT_DIR/bin/main_cyon.webp
+Terminal=false
+Categories=Application;
+EOF
+    
+    update-desktop-database ~/.local/share/applications
+    echo -e "${CYAN} Cyon desktop compiled successfully.${NC}"
+}
+setup_pyra_env() {
+    echo -e "${CYAN} Setting up pyra_env...${NC}"
+    sudo apt install -y python3-gi python3-gi-cairo gir1.2-gtk-3.0
+    python3 -m venv --system-site-packages ~/pyra_env
+    source ~/pyra_env/bin/activate
+    pip3 install --upgrade pip
+    pip3 install pyfiglet moviepy rich pillow cryptography pyautogui
+    deactivate
+    echo -e "${CYAN} pyra_env ready at ~/pyra_env${NC}"
+}
+compile_pyra_toolz() {
+    echo -e "${CYAN} Compiling pyra_toolz...${NC}"
+    sudo apt install -y yt-dlp
+    cd && mkdir ~/pyra_temp && cd ~/pyra_temp && python3 -m venv .
+    source ~/pyra_temp/bin/activate
+    pip3 install pyinstaller rich pillow cryptography
+    sudo apt update && sudo apt upgrade -y
+    cd ~/cyon/pyra_tool
+    echo -e "${RED} Compiling pyra_toolz...\n${NC}"
+    pyinstaller --onefile --collect-all rich --name pyra_toolz main.py || { echo -e "${RED} Failed to compile pyra_toolz${NC}"; deactivate; exit 1; }
+    deactivate
+    cd && rm -rf ~/pyra_temp
+    cp ~/cyon/pyra_tool/dist/pyra_toolz ~/cyon/pyra_tool
+    chmod +x ~/cyon/pyra_tool/pyra_toolz
+    rm -rf ~/cyon/pyra_tool/dist && rm -rf ~/cyon/pyra_tool/build
+    echo -e "${CYAN} pyra_toolz compiled successfully.${NC}"
+}
+compile_pyra_termux() {
+    echo -e "${CYAN} Compiling pyra_termux...${NC}"
+    apt install -y yt-dlp
+    cd && mkdir ~/pyra_temp && cd ~/pyra_temp && python3 -m venv .
+    source ~/pyra_temp/bin/activate
+    pip3 install rich pyinstaller cryptography
+    apt update && apt upgrade -y
+    cd ~/cyon/pyra_tool
+    echo -e "${RED} Compiling pyra_termux...\n${NC}"
+    pyinstaller --onefile --collect-all rich --name pyra_termux main.py || { echo -e "${RED} Failed to compile pyra_termux${NC}"; deactivate; exit 1; }
+    deactivate
+    cd && rm -rf ~/pyra_temp
+    cp -r ~/cyon/pyra_tool/dist/* ~/cyon/pyra_tool
+    rm -rf ~/cyon/pyra_tool/dist && rm -rf ~/cyon/pyra_tool/build
+    chmod +x ~/cyon/pyra_tool/pyra_termux
+    echo -e "${CYAN} pyra_termux compiled successfully.${NC}"
+}
+uninstall_cyon() {
+    echo -e "${RED} ==============================${NC}"
+    echo -e "${RED}    Cyon Uninstaller${NC}"
+    echo -e "${RED} ==============================${NC}"
+    echo -e "${RED} This will completely remove Cyon from your system.${NC}"
+    echo ""
+    read -p $' \033[0;31mAre you sure? This cannot be undone. [y/N]: \033[0m' confirm
+    case "$confirm" in
+        [yY][eE][sS]|[yY])
+            echo -e "${RED} Removing Pyra PATH from ~/.bashrc...${NC}"
+            remove_path_from_bashrc
+            echo -e "${RED} Removing desktop entry...${NC}"
+            rm -f ~/.local/share/applications/cyon.desktop
+            if command -v update-desktop-database &>/dev/null; then
+                update-desktop-database ~/.local/share/applications
+            fi
+            echo -e "${RED} Removing pyra_env...${NC}"
+            rm -rf ~/pyra_env
+            echo -e "${RED} Removing Cyon directory...${NC}"
+            rm -rf "$SCRIPT_DIR"
+            echo -e "${CYAN} Cyon has been fully removed. Goodbye!${NC}"
+            exit 0
+            ;;
+        *)
+            echo -e "${CYAN} Uninstall cancelled.${NC}"
+            ;;
+    esac
+}
+# ------------------------
+# Main Menu Loop
+# ------------------------
+while true; do
+    echo -e "\n ${CYAN}▄█▄  ▀▄    ▄ ████▄    ▄   \n █▀ ▀▄  █  █  █   █     █  \n █   ▀   ▀█   █   █ ██   █ \n █▄  ▄▀  █    ▀████ █ █  █ \n ▀███▀ ▄▀           █  █ █ \n                    █   ██${NC}\n"
+    echo -e "${CYAN} ==============================${NC}"
+    echo -e "${CYAN}    Build System${NC}"
+    echo -e "${CYAN} ==============================${NC}"
+    echo -e "${CYAN} 1) Compile cyon desktop${NC}"
+    echo -e "${CYAN} 2) Setup pyra_env${NC}"
+    echo -e "${CYAN} 3) Compile pyra_toolz${NC}"
+    echo -e "${CYAN} 4) Compile pyra_termux${NC}"
+    echo -e "${CYAN} 5) Compile all${NC}"
+    echo -e "${CYAN} 6) Add Cyon/Pyra PATH to ~/.bashrc${NC}"
+    echo -e "${RED} 7) Remove Pyra PATH from ~/.bashrc${NC}"
+    echo -e "${RED} 8) Uninstall Cyon${NC}"
+    echo -e "${RED} 9) Exit${NC}"
+    echo -e "${CYAN} ==============================${NC}"
+    read -p $' \033[0;36mSelect an option [1-9]: \033[0m' choice
+    case $choice in
+        1)
+            install_desktop_dependencies
+            compile_cyon_desktop
+            ;;
+        2) setup_pyra_env ;;
+        3) compile_pyra_toolz ;;
+        4) compile_pyra_termux ;;
+        5)
+            install_desktop_dependencies
+            compile_cyon_desktop
+            setup_pyra_env
+            compile_pyra_toolz
+            compile_pyra_termux
+            echo -e "${CYAN} All binaries compiled successfully.${NC}"
+            ;;
+        6) add_path_to_bashrc ;;
+        7) remove_path_from_bashrc ;;
+        8) uninstall_cyon ;;
+        9)
+            echo -e "${RED} Exiting. Later!${NC}"
+            exit 0
+            ;;
+        *)
+            echo -e "${RED} Invalid option, try again.${NC}"
+            ;;
+    esac
+done

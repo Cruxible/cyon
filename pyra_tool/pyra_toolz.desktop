@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Encoding=UTF-8
+Name=Pyra CLI Editor
+Comment=Commandline Video Editor
+Exec=bash -c 'source ~/pyra_env/bin/activate && ~/pyra_bin/cli_editor/pyra_editor'
+Icon=/home/ioannes/pyra_bin/cli_editor/pyra_icon17.jpeg
+Terminal=true
+Categories=Application;
+Name[en_US]=Pyra Editor
