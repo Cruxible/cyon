@@ -207,7 +207,7 @@ These slash-commands are handled by `cyon_shell.py` and work from the input fiel
 | Tools → Editor Tools → Stitch Audio | Concatenate two audio files into one |
 | Tools → Convert Pics | GTK image format converter |
 | Tools → Create Tarfile | GTK tarball creator and encryptor |
-| Tools → Cyon TTS | Text-to-speech tool (Piper) |
+| Tools → Cyon TTS | Text-to-speech tool (Piper) — requires Piper models in `~/cyon/piper_models/` |
 | Security → Defense → Watcher | Toggle filesystem watcher |
 | Security → Defense → Firewall | Firewall controls |
 | Security → Offense → Port Scanner | Network port scanner |
@@ -270,9 +270,32 @@ deactivate
 | `concat_aud.py` | Stitch two audio files together → MP3 |
 | `gtk_convert.py` | GTK image format converter |
 | `tarmaker_gtk3.py` | GTK tarball creator and encryptor |
-| `cyon_tts.py` | Text-to-speech interface (Piper) |
+| `cyon_tts.py` | Text-to-speech interface (Piper) — requires Piper models in `~/cyon/piper_models/` |
 | `pyra_player.py` | GTK media player |
 | `pyra_downloader.py` | GTK YouTube/audio/video downloader via yt-dlp (standalone) |
+
+---
+
+## 🔊 Cyon TTS (Text-to-Speech)
+
+Cyon TTS is powered by [Piper](https://github.com/rhasspy/piper) and launched from **Tools → Cyon TTS** in the Programs menu.
+
+> ⚠️ **Piper voice models must be placed in `~/cyon/piper_models/` or TTS and Cyon's voice will not work.**
+
+### Setup
+```bash
+# Create the models directory
+mkdir -p ~/cyon/piper_models
+
+# Download a Piper voice model (example: en_US-lessac-medium)
+cd ~/cyon/piper_models
+wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx
+wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json
+```
+
+Each Piper model consists of two files: a `.onnx` model file and a `.onnx.json` config file. Both must be present in `~/cyon/piper_models/`. Browse available voices at [huggingface.co/rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices).
+
+---
 
 ### Notes
 - All editor tools require `moviepy` (v2+) installed in `pyra_env`
