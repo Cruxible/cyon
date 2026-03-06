@@ -104,7 +104,7 @@ ollama pull llama3
 
 ### Python pip packages (installed automatically in pyra_env)
 ```bash
-pip3 install pyfiglet moviepy rich pillow cryptography pyautogui
+pip3 install pyfiglet moviepy rich pillow cryptography pyautogui piper-tts pathvalidate
 ```
 
 ### Discord bot (optional)
@@ -172,14 +172,15 @@ chmod +x compile_cyon
 | Option | Description |
 |--------|-------------|
 | 1 | Install apt dependencies + compile all C binaries + create .desktop launcher |
-| 2 | Setup pyra_env (creates ~/pyra_env and installs pyra_lib pip dependencies) |
+| 2 | Setup pyra_env + install Piper TTS (creates ~/pyra_env, installs all pip deps, downloads voice models) |
 | 3 | Compile pyra_toolz (Linux binary via PyInstaller) |
 | 4 | Compile pyra_termux (Termux binary) |
 | 5 | Compile all (runs 1 + 2 + 3 + 4 in sequence) |
 | 6 | Add ~/cyon/bin and ~/cyon/pyra_tool to PATH in ~/.bashrc |
-| 7 | Remove Pyra PATH from ~/.bashrc |
-| 8 | Uninstall Cyon |
-| 9 | Exit |
+| 7 | Setup Piper voices only (download voice models to ~/cyon/piper_models/) |
+| 8 | Remove Pyra PATH from ~/.bashrc |
+| 9 | Uninstall Cyon |
+| 0 | Exit |
 
 ### Manual Compilation
 ```bash
@@ -271,7 +272,7 @@ Run option 2 from `compile_cyon` or manually:
 sudo apt install -y python3-gi python3-gi-cairo gir1.2-gtk-3.0
 python3 -m venv --system-site-packages ~/pyra_env
 source ~/pyra_env/bin/activate
-pip3 install pyfiglet moviepy rich pillow cryptography pyautogui
+pip3 install pyfiglet moviepy rich pillow cryptography pyautogui piper-tts pathvalidate
 deactivate
 ```
 
@@ -322,46 +323,51 @@ deactivate
 ---
 
 ## 🔊 Cyon TTS (Text-to-Speech)
+
 Cyon TTS is powered by [Piper](https://github.com/rhasspy/piper) and launched from **Tools → Cyon TTS** in the Programs menu. The Discord bot `/say` command also uses Piper to generate voice replies.
 
-> ⚠️ **Both the Piper binary and voice models must be installed or TTS will not work.**
+> ⚠️ **Both the Piper pip package and voice models must be installed or TTS will not work.**
 
-### 1. Install Piper Binary
+### Easiest Setup — compile_cyon option 2
+
+Running option 2 from `compile_cyon` automatically installs `piper-tts` into `pyra_env` and walks you through downloading a voice model. This is the recommended method.
+
+### Manual Setup
+
+#### 1. Install Piper
 ```bash
-# Download and extract Piper binary
-cd ~/cyon
-wget https://github.com/rhasspy/piper/releases/download/v1.2.0/piper_linux_x86_64.tar.gz
-tar -xzf piper_linux_x86_64.tar.gz
-rm piper_linux_x86_64.tar.gz
-
-# Symlink to ~/cyon/bin so it's available in PATH
-ln -s ~/cyon/piper/piper ~/cyon/bin/piper
-
-# Verify
-piper --version
+source ~/pyra_env/bin/activate
+pip install piper-tts pathvalidate
+deactivate
 ```
 
-### 2. Download a Voice Model
+#### 2. Download a Voice Model
 ```bash
-# Create the models directory
 mkdir -p ~/cyon/piper_models
 cd ~/cyon/piper_models
 
-# Example: en_US-lessac-medium
+# Example: en_US-joe-medium (male)
+wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/joe/medium/en_US-joe-medium.onnx
+wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/joe/medium/en_US-joe-medium.onnx.json
+
+# Example: en_US-lessac-medium (male)
 wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx
 wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json
+
+# Example: en_US-amy-medium (female)
+wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx
+wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx.json
 ```
 
-Each Piper model consists of two files — a `.onnx` model file and a `.onnx.json` config file. Both must be present in `~/cyon/piper_models/`. Browse available voices at [huggingface.co/rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices).
+Each Piper model consists of two files — a `.onnx` model file and a `.onnx.json` config file. Both must be present in `~/cyon/piper_models/`. Browse all available voices at [huggingface.co/rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices).
 
-### 3. Update cyon_config.ini
-Set the model filename in `~/cyon/cyon_config.ini`:
+#### 3. Update cyon_config.ini
 ```ini
 [piper]
-model = en_US-lessac-medium.onnx
+model = en_US-joe-medium.onnx
 ```
 
-> ℹ️ The model name in `cyon_config.ini` must exactly match the `.onnx` filename in `~/cyon/piper_models/`.
+> ℹ️ The model name must exactly match the `.onnx` filename in `~/cyon/piper_models/`.
 
 ---
 
@@ -374,7 +380,7 @@ model = en_US-lessac-medium.onnx
 
 ## 🗑️ Uninstalling
 
-Select option **8** from the `compile_cyon` menu. You will be asked to confirm before anything is deleted.
+Select option **9** from the `compile_cyon` menu. You will be asked to confirm before anything is deleted.
 
 The uninstaller removes:
 - `~/.local/share/applications/cyon.desktop` — the desktop launcher entry

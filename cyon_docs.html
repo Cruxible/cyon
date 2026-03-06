@@ -889,14 +889,15 @@ You are running inside the Cyon desktop application on the user's machine.
     <table>
       <tr><th>Option</th><th>Action</th></tr>
       <tr><td>1</td><td>Install apt deps + compile all C binaries + create .desktop launcher</td></tr>
-      <tr><td>2</td><td>Create ~/pyra_env + install all pip packages</td></tr>
+      <tr><td>2</td><td>Create ~/pyra_env + install all pip packages including piper-tts + download voice models</td></tr>
       <tr><td>3</td><td>Compile pyra_toolz Linux binary (uses PyInstaller in temp venv)</td></tr>
       <tr><td>4</td><td>Compile pyra_termux binary (for Termux on Android)</td></tr>
       <tr><td>5</td><td>Run options 1 + 2 + 3 + 4 in sequence (full install)</td></tr>
       <tr><td>6</td><td>Add ~/cyon/bin and ~/cyon/pyra_tool to PATH in ~/.bashrc</td></tr>
-      <tr><td>7</td><td>Remove Pyra PATH block from ~/.bashrc</td></tr>
-      <tr><td>8</td><td>Uninstall Cyon (see below)</td></tr>
-      <tr><td>9</td><td>Exit</td></tr>
+      <tr><td>7</td><td>Setup Piper voices only — download voice models to ~/cyon/piper_models/</td></tr>
+      <tr><td>8</td><td>Remove Pyra PATH block from ~/.bashrc</td></tr>
+      <tr><td>9</td><td>Uninstall Cyon (see below)</td></tr>
+      <tr><td>0</td><td>Exit</td></tr>
     </table>
   </section>
 
@@ -904,7 +905,7 @@ You are running inside the Cyon desktop application on the user's machine.
   <section id="uninstall">
     <h2>Uninstall</h2>
 
-    <p>Select option <strong>8</strong> in <code>compile_cyon</code>. You will be asked to confirm. The uninstaller removes:</p>
+    <p>Select option <strong>9</strong> in <code>compile_cyon</code>. You will be asked to confirm. The uninstaller removes:</p>
     <table>
       <tr><th>What</th><th>Path</th></tr>
       <tr><td>Desktop launcher</td><td>~/.local/share/applications/cyon.desktop</td></tr>
