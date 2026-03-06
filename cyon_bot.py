@@ -131,8 +131,20 @@ def ask_phi3(prompt, user_id):
         reply = response.json()["response"]
         conversation_history[user_id].append(f"Assistant: {reply}")
         return reply
+    except requests.exceptions.ConnectionError:
+        print("[DEBUG] Ollama error: Cannot connect to localhost:11434 — is Ollama running?")
+        return "Sorry, I had trouble thinking that one through. Try again!"
+    except requests.exceptions.Timeout:
+        print("[DEBUG] Ollama error: Request timed out — model may still be loading.")
+        return "Sorry, I had trouble thinking that one through. Try again!"
+    except KeyError:
+        print("[DEBUG] Ollama error: Unexpected response — is the model name correct? (currently: 'cyon')")
+        print("[DEBUG] Run 'ollama list' to check available models.")
+        return "Sorry, I had trouble thinking that one through. Try again!"
     except Exception as e:
         print(f"[DEBUG] Ollama error: {e}")
+        import traceback
+        traceback.print_exc()
         return "Sorry, I had trouble thinking that one through. Try again!"
 
 
