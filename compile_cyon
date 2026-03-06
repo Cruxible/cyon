@@ -342,56 +342,50 @@ setup_pyra_env() {
     python3 -m venv --system-site-packages ~/pyra_env
     source ~/pyra_env/bin/activate
     pip3 install --upgrade pip
-    pip3 install pyfiglet moviepy rich pillow cryptography pyautogui piper-tts pathvalidate
+    pip3 install pyfiglet moviepy rich pillow cryptography pyautogui
     deactivate
     echo -e "${CYAN} pyra_env ready at ~/pyra_env${NC}"
+    install_piper_binary
     setup_piper_models
 }
 
+install_piper_binary() {
+    echo -e "${CYAN} Installing Piper TTS...${NC}"
+
+    sudo apt update
+    sudo apt install -y python3-pip ffmpeg libsndfile1
+    sudo apt install -y alsa-utils pulseaudio-utils
+
+    pip install piper-tts
+    pip install --upgrade piper-tts onnxruntime pathvalidate
+    pip install onnxruntime
+
+    echo -e "${CYAN} Piper installed via pip.${NC}"
+}
+
 setup_piper_models() {
-    echo -e "${CYAN} Setting up Piper voice models...${NC}"
-    mkdir -p ~/cyon/piper_models
-    cd ~/cyon/piper_models
+    echo -e "${CYAN} Downloading Piper voice models...${NC}"
 
-    if ls *.onnx 2>/dev/null | grep -q onnx; then
-        echo -e "${CYAN} Piper models already present — skipping download.${NC}"
-        return
-    fi
+    mkdir -p ~/piper_models
+    cd ~/piper_models || exit
 
-    echo -e "${CYAN} Select a Piper voice to download:${NC}"
-    echo -e "${CYAN} 1) en_US-joe-medium (male)${NC}"
-    echo -e "${CYAN} 2) en_US-lessac-medium (male)${NC}"
-    echo -e "${CYAN} 3) en_US-amy-medium (female)${NC}"
-    echo -e "${CYAN} 4) Skip${NC}"
-    read -p $' \033[0;36mSelect a voice [1-4]: \033[0m' voice_choice
+    # Joe voice
+    wget -O en_US-joe-medium.onnx \
+    "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_US/joe/medium/en_US-joe-medium.onnx?download=true"
 
-    case $voice_choice in
-        1)
-            wget -q --show-progress https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/joe/medium/en_US-joe-medium.onnx
-            wget -q --show-progress https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/joe/medium/en_US-joe-medium.onnx.json
-            echo -e "${CYAN} Downloaded en_US-joe-medium${NC}"
-            echo -e "${CYAN} Set in ~/cyon/cyon_config.ini: model = en_US-joe-medium.onnx${NC}"
-            ;;
-        2)
-            wget -q --show-progress https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx
-            wget -q --show-progress https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json
-            echo -e "${CYAN} Downloaded en_US-lessac-medium${NC}"
-            echo -e "${CYAN} Set in ~/cyon/cyon_config.ini: model = en_US-lessac-medium.onnx${NC}"
-            ;;
-        3)
-            wget -q --show-progress https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx
-            wget -q --show-progress https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx.json
-            echo -e "${CYAN} Downloaded en_US-amy-medium${NC}"
-            echo -e "${CYAN} Set in ~/cyon/cyon_config.ini: model = en_US-amy-medium.onnx${NC}"
-            ;;
-        4)
-            echo -e "${CYAN} Skipping — download models manually to ~/cyon/piper_models/${NC}"
-            ;;
-        *)
-            echo -e "${RED} Invalid option — skipping voice download.${NC}"
-            ;;
-    esac
-    echo -e "${CYAN} Piper setup complete.${NC}"
+    wget -O en_US-joe-medium.onnx.json \
+    "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_US/joe/medium/en_US-joe-medium.onnx.json?download=true"
+
+    # Lessac voice
+    wget -O en_US-lessac-medium.onnx \
+    "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_US/lessac/medium/en_US-lessac-medium.onnx?download=true"
+
+    wget -O en_US-lessac-medium.onnx.json \
+    "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json?download=true"
+
+    echo -e "${CYAN} Piper voices installed in ~/piper_models${NC}"
+
+    source ~/pyra_env/bin/activate
 }
 
 compile_pyra_toolz() {
@@ -493,7 +487,7 @@ while true; do
             echo -e "${CYAN} All binaries compiled successfully.${NC}"
             ;;
         6) add_path_to_bashrc ;;
-        7) setup_piper_models ;;
+        7) install_piper_binary ; setup_piper_models ;;
         8) remove_path_from_bashrc ;;
         9) uninstall_cyon ;;
         0)
