@@ -322,23 +322,46 @@ deactivate
 ---
 
 ## 🔊 Cyon TTS (Text-to-Speech)
+Cyon TTS is powered by [Piper](https://github.com/rhasspy/piper) and launched from **Tools → Cyon TTS** in the Programs menu. The Discord bot `/say` command also uses Piper to generate voice replies.
 
-Cyon TTS is powered by [Piper](https://github.com/rhasspy/piper) and launched from **Tools → Cyon TTS** in the Programs menu.
+> ⚠️ **Both the Piper binary and voice models must be installed or TTS will not work.**
 
-> ⚠️ **Piper voice models must be placed in `~/cyon/piper_models/` or TTS and Cyon's voice will not work.**
+### 1. Install Piper Binary
+```bash
+# Download and extract Piper binary
+cd ~/cyon
+wget https://github.com/rhasspy/piper/releases/download/v1.2.0/piper_linux_x86_64.tar.gz
+tar -xzf piper_linux_x86_64.tar.gz
+rm piper_linux_x86_64.tar.gz
 
-### Setup
+# Symlink to ~/cyon/bin so it's available in PATH
+ln -s ~/cyon/piper/piper ~/cyon/bin/piper
+
+# Verify
+piper --version
+```
+
+### 2. Download a Voice Model
 ```bash
 # Create the models directory
 mkdir -p ~/cyon/piper_models
-
-# Download a Piper voice model (example: en_US-lessac-medium)
 cd ~/cyon/piper_models
+
+# Example: en_US-lessac-medium
 wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx
 wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json
 ```
 
-Each Piper model consists of two files: a `.onnx` model file and a `.onnx.json` config file. Both must be present in `~/cyon/piper_models/`. Browse available voices at [huggingface.co/rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices).
+Each Piper model consists of two files — a `.onnx` model file and a `.onnx.json` config file. Both must be present in `~/cyon/piper_models/`. Browse available voices at [huggingface.co/rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices).
+
+### 3. Update cyon_config.ini
+Set the model filename in `~/cyon/cyon_config.ini`:
+```ini
+[piper]
+model = en_US-lessac-medium.onnx
+```
+
+> ℹ️ The model name in `cyon_config.ini` must exactly match the `.onnx` filename in `~/cyon/piper_models/`.
 
 ---
 
