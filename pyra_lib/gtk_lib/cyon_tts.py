@@ -1,27 +1,21 @@
 #!/usr/bin/env python3
 # Author: Ioannes Cruxibulum
 # pyra_tts.py — part of pyra_lib
-
 import os
 import sys
 import subprocess
 import threading
 from pathlib import Path
-
 import gi
-
 gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 from gi.repository import Gtk, Gdk, GLib
-
 PYRA_ENV = Path.home() / "pyra_env"
 PYRA_LIB = Path.home() / "cyon" / "pyra_lib"
-
 site_pkgs = list(PYRA_ENV.glob("lib/python3*/site-packages"))
 if site_pkgs:
     sys.path.insert(0, str(site_pkgs[0]))
 sys.path.append(str(PYRA_LIB))
-
 CSS = b"""
 window, .background {
     background-color: #0a0a0f;
@@ -42,6 +36,19 @@ label {
     color: #336655;
     font-family: monospace;
     font-size: 10px;
+}
+.voice-label {
+    color: #00cc77;
+    font-family: monospace;
+    font-size: 11px;
+    min-width: 80px;
+}
+.voice-label-active {
+    color: #00ff99;
+    font-family: monospace;
+    font-size: 11px;
+    font-weight: bold;
+    min-width: 80px;
 }
 status-ok   { color: #00ff99; }
 status-err  { color: #ff3355; }
@@ -85,12 +92,25 @@ separator {
 }
 """
 
+VOICES = {
+    "joe": {
+        "label": "JOE  ♂",
+        "model": "en_US-joe-medium.onnx",
+        "config": "en_US-joe-medium.onnx.json",
+    },
+    "lessac": {
+        "label": "LESSAC ♀",
+        "model": "en_US-lessac-medium.onnx",
+        "config": "en_US-lessac-medium.onnx.json",
+    },
+}
 
 class PiperTTSWindow(Gtk.ApplicationWindow):
     def __init__(self, app):
         super().__init__(application=app, title="CYON // TTS")
-        self.set_default_size(500, 300)
+        self.set_default_size(500, 320)
         self.set_border_width(12)
+        self.current_voice = "joe"  # default
 
         # Apply CSS
         provider = Gtk.CssProvider()
@@ -107,6 +127,31 @@ class PiperTTSWindow(Gtk.ApplicationWindow):
         title.get_style_context().add_class("title-label")
         title.set_halign(Gtk.Align.START)
         outer.pack_start(title, False, False, 0)
+
+        # Voice toggle row
+        voice_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        voice_row.set_halign(Gtk.Align.CENTER)
+
+        voice_head = Gtk.Label(label="VOICE ▸")
+        voice_head.get_style_context().add_class("status-label")
+        voice_row.pack_start(voice_head, False, False, 4)
+
+        self.lbl_joe = Gtk.Label(label="JOE  ♂")
+        self.lbl_joe.get_style_context().add_class("voice-label-active")
+        self.lbl_joe.set_halign(Gtk.Align.END)
+        voice_row.pack_start(self.lbl_joe, False, False, 0)
+
+        self.toggle_switch = Gtk.Switch()
+        self.toggle_switch.set_active(False)   # False = joe, True = lessac
+        self.toggle_switch.connect("notify::active", self.on_voice_switched)
+        voice_row.pack_start(self.toggle_switch, False, False, 4)
+
+        self.lbl_lessac = Gtk.Label(label="LESSAC ♀")
+        self.lbl_lessac.get_style_context().add_class("voice-label")
+        self.lbl_lessac.set_halign(Gtk.Align.START)
+        voice_row.pack_start(self.lbl_lessac, False, False, 0)
+
+        outer.pack_start(voice_row, False, False, 0)
 
         # Input field
         self.text_entry = Gtk.Entry()
@@ -131,6 +176,22 @@ class PiperTTSWindow(Gtk.ApplicationWindow):
 
         self.show_all()
         self.log("▸ Ready. Enter text and press GENERATE.")
+        self.log(f"▸ Active voice: {VOICES[self.current_voice]['label']}")
+
+    def on_voice_switched(self, switch, gparam):
+        if switch.get_active():
+            self.current_voice = "lessac"
+            self.lbl_joe.get_style_context().remove_class("voice-label-active")
+            self.lbl_joe.get_style_context().add_class("voice-label")
+            self.lbl_lessac.get_style_context().remove_class("voice-label")
+            self.lbl_lessac.get_style_context().add_class("voice-label-active")
+        else:
+            self.current_voice = "joe"
+            self.lbl_lessac.get_style_context().remove_class("voice-label-active")
+            self.lbl_lessac.get_style_context().add_class("voice-label")
+            self.lbl_joe.get_style_context().remove_class("voice-label")
+            self.lbl_joe.get_style_context().add_class("voice-label-active")
+        self.log(f"▸ Voice switched to: {VOICES[self.current_voice]['label']}")
 
     def log(self, msg):
         end = self.log_buffer.get_end_iter()
@@ -142,26 +203,25 @@ class PiperTTSWindow(Gtk.ApplicationWindow):
         if not text:
             self.log("▸ Please enter some text.")
             return
-        self.log(f"▸ Generating voice for: {text}")
-        threading.Thread(target=self.run_piper, args=(text,), daemon=True).start()
+        voice_info = VOICES[self.current_voice]
+        self.log(f"▸ [{voice_info['label']}] Generating: {text}")
+        threading.Thread(target=self.run_piper, args=(text, self.current_voice), daemon=True).start()
 
-    def run_piper(self, text):
+    def run_piper(self, text, voice_key):
         """Run Piper TTS to generate voice.wav"""
-        PIPER_EXE = str(Path.home() / "pyra_env/bin/piper")
-        PIPER_MODEL = str(Path.home() / "cyon/piper_models/en_US-joe-medium.onnx")
-        PIPER_CONFIG = str(Path.home() / "cyon/piper_models/en_US-joe-medium.onnx.json")
-        VOICE_OUTPUT = str(Path.home() / "cyon/piper_models/voice.wav")
-
+        voice_info = VOICES[voice_key]
+        PIPER_EXE    = str(Path.home() / "cyon" / "piper" / "piper")
+        MODELS_DIR   = Path.home() / "cyon/piper_models"
+        PIPER_MODEL  = str(MODELS_DIR / voice_info["model"])
+        PIPER_CONFIG = str(MODELS_DIR / voice_info["config"])
+        VOICE_OUTPUT = str(MODELS_DIR / "voice.wav")
         try:
             subprocess.run(
                 [
                     PIPER_EXE,
-                    "--model",
-                    PIPER_MODEL,
-                    "--config",
-                    PIPER_CONFIG,
-                    "--output_file",
-                    VOICE_OUTPUT,
+                    "--model",  PIPER_MODEL,
+                    "--config", PIPER_CONFIG,
+                    "--output_file", VOICE_OUTPUT,
                 ],
                 input=text.encode("utf-8"),
                 check=True,
