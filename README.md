@@ -104,7 +104,7 @@ ollama pull llama3
 
 ### Python pip packages (installed automatically in pyra_env)
 ```bash
-pip3 install pyfiglet moviepy rich pillow cryptography pyautogui piper-tts pathvalidate
+pip3 install pyfiglet moviepy rich pillow cryptography pyautogui
 ```
 
 ### Discord bot (optional)
@@ -272,7 +272,7 @@ Run option 2 from `compile_cyon` or manually:
 sudo apt install -y python3-gi python3-gi-cairo gir1.2-gtk-3.0
 python3 -m venv --system-site-packages ~/pyra_env
 source ~/pyra_env/bin/activate
-pip3 install pyfiglet moviepy rich pillow cryptography pyautogui piper-tts pathvalidate
+pip3 install pyfiglet moviepy rich pillow cryptography pyautogui
 deactivate
 ```
 
@@ -326,19 +326,22 @@ deactivate
 
 Cyon TTS is powered by [Piper](https://github.com/rhasspy/piper) and launched from **Tools → Cyon TTS** in the Programs menu. The Discord bot `/say` command also uses Piper to generate voice replies.
 
-> ⚠️ **Both the Piper pip package and voice models must be installed or TTS will not work.**
+> ⚠️ **The Piper binary and voice models must both be installed or TTS will not work.**
 
 ### Easiest Setup — compile_cyon option 2
 
-Running option 2 from `compile_cyon` automatically installs `piper-tts` into `pyra_env` and walks you through downloading a voice model. This is the recommended method.
+Running option 2 from `compile_cyon` automatically downloads the official Piper binary into `~/pyra_env/bin/` and walks you through downloading a voice model. This is the recommended method.
 
 ### Manual Setup
 
-#### 1. Install Piper
+#### 1. Install Piper Binary
 ```bash
-source ~/pyra_env/bin/activate
-pip install piper-tts pathvalidate
-deactivate
+cd /tmp
+wget https://github.com/rhasspy/piper/releases/download/v1.2.0/piper_linux_x86_64.tar.gz
+tar -xzf piper_linux_x86_64.tar.gz
+cp piper/piper ~/pyra_env/bin/piper
+chmod +x ~/pyra_env/bin/piper
+rm -rf piper piper_linux_x86_64.tar.gz
 ```
 
 #### 2. Download a Voice Model
