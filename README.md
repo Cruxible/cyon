@@ -322,27 +322,33 @@ deactivate
 
 ---
 
-## 🔊 Cyon TTS (Text-to-Speech)
+🔊 Cyon TTS (Text-to-Speech)
 
-Cyon TTS is powered by [Piper](https://github.com/rhasspy/piper) and launched from **Tools → Cyon TTS** in the Programs menu. The Discord bot `/say` command also uses Piper to generate voice replies.
+Cyon TTS is powered by Piper
+ and launched from Tools → Cyon TTS in the Programs menu. The Discord bot /say command also uses Piper to generate voice replies.
 
-> ⚠️ **The Piper binary and voice models must both be installed or TTS will not work.**
+⚠️ Piper and a voice model must both be installed or TTS will not work.
 
-### Easiest Setup — compile_cyon option 2
+Easiest Setup — compile_cyon option 2
 
-Running option 2 from `compile_cyon` automatically downloads the official Piper binary into `~/pyra_env/bin/` and walks you through downloading a voice model. This is the recommended method.
+Running option 2 from compile_cyon automatically:
 
-### Manual Setup
+• Creates ~/pyra_env
+• Installs Piper via pip
+• Installs audio dependencies
+• Downloads voice models to ~/piper_models
 
-#### 1. Install Piper Binary
-```bash
-cd /tmp
-wget https://github.com/rhasspy/piper/releases/download/v1.2.0/piper_linux_x86_64.tar.gz
-tar -xzf piper_linux_x86_64.tar.gz
-cp piper/piper ~/pyra_env/bin/piper
-chmod +x ~/pyra_env/bin/piper
-rm -rf piper piper_linux_x86_64.tar.gz
-```
+This is the recommended method.
+
+Manual Setup
+1. Install Piper
+sudo apt update
+sudo apt install -y python3-pip ffmpeg libsndfile1 alsa-utils pulseaudio-utils
+
+source ~/pyra_env/bin/activate
+
+pip install piper-tts
+pip install --upgrade piper-tts onnxruntime pathvalidate
 
 #### 2. Download a Voice Model
 ```bash
