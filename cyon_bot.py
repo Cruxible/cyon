@@ -2,12 +2,75 @@ import discord
 import os
 import requests
 import asyncio
+import configparser
+import sys
 from concurrent.futures import ThreadPoolExecutor
 import subprocess
 
-# ---- CONFIG ----
-TOKEN = "token"  # replace with your new token or use os.getenv("DISCORD_TOKEN")
-AUTHORIZED_USER_ID = user_id
+# ─────────────────────────────────────────────
+#  Config loader
+# ─────────────────────────────────────────────
+
+CONFIG_PATH = os.path.expanduser("~/cyon/cyon_config.ini")
+
+def create_default_config():
+    """Create a blank config file with placeholder values on first run."""
+    os.makedirs(os.path.expanduser("~/cyon"), exist_ok=True)
+    with open(CONFIG_PATH, "w") as f:
+        f.write("[discord]\n")
+        f.write("token = YOUR_BOT_TOKEN_HERE\n")
+        f.write("user_id = YOUR_USER_ID_HERE\n\n")
+        f.write("[piper]\n")
+        f.write("model = en_US-joe-medium.onnx\n")
+    print(f"[cyon_bot] Config created at {CONFIG_PATH}")
+    print("[cyon_bot] Edit it with your Discord token and user ID, then restart.")
+
+def load_config():
+    if not os.path.exists(CONFIG_PATH):
+        print("[cyon_bot] No config file found — creating one...")
+        create_default_config()
+        sys.exit(0)
+
+    config = configparser.ConfigParser()
+    config.read(CONFIG_PATH)
+
+    token = config.get("discord", "token", fallback=None)
+    user_id_str = config.get("discord", "user_id", fallback=None)
+    piper_model = config.get("piper", "model", fallback="en_US-joe-medium.onnx")
+
+    if not token or token == "YOUR_BOT_TOKEN_HERE":
+        print("[cyon_bot] ERROR: Discord token not set in cyon_config.ini")
+        print(f"[cyon_bot] Edit {CONFIG_PATH} and add your token.")
+        sys.exit(1)
+
+    if not user_id_str or user_id_str == "YOUR_USER_ID_HERE":
+        print("[cyon_bot] ERROR: user_id not set in cyon_config.ini")
+        print(f"[cyon_bot] Edit {CONFIG_PATH} and add your Discord user ID.")
+        sys.exit(1)
+
+    try:
+        user_id = int(user_id_str)
+    except ValueError:
+        print("[cyon_bot] ERROR: user_id must be a number in cyon_config.ini")
+        sys.exit(1)
+
+    return token, user_id, piper_model
+
+TOKEN, AUTHORIZED_USER_ID, PIPER_MODEL_NAME = load_config()
+
+# ─────────────────────────────────────────────
+#  Piper paths — resolved from ~/cyon/piper_models/
+# ─────────────────────────────────────────────
+
+CYON_DIR        = os.path.expanduser("~/cyon")
+PIPER_MODELS    = os.path.join(CYON_DIR, "piper_models")
+PIPER_MODEL_PATH  = os.path.join(PIPER_MODELS, PIPER_MODEL_NAME)
+PIPER_CONFIG_PATH = os.path.join(PIPER_MODELS, PIPER_MODEL_NAME + ".json")
+VOICE_FILE        = os.path.join(PIPER_MODELS, "voice.wav")
+
+# ─────────────────────────────────────────────
+#  Discord client setup
+# ─────────────────────────────────────────────
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -18,11 +81,10 @@ executor = ThreadPoolExecutor()
 conversation_history = {}
 MAX_HISTORY = 10  # max exchanges to keep (1 exchange = user message + reply)
 
-# Piper paths
-PIPER_MODEL_PATH = "/home/cruxible/cyon/piper_models/en_US-joe-medium.onnx"
-PIPER_CONFIG_PATH = "/home/cruxible/cyon/piper_models/en_US-joe-medium.onnx.json"
-VOICE_FILE = "/home/cruxible/cyon/piper_models/voice.wav"
 
+# ─────────────────────────────────────────────
+#  TTS
+# ─────────────────────────────────────────────
 
 def tts_piper_to_file(text, output_file=VOICE_FILE):
     env = os.environ.copy()
@@ -31,12 +93,9 @@ def tts_piper_to_file(text, output_file=VOICE_FILE):
     result = subprocess.run(
         [
             "piper",
-            "--model",
-            PIPER_MODEL_PATH,
-            "--config",
-            PIPER_CONFIG_PATH,
-            "--output_file",
-            output_file,
+            "--model",      PIPER_MODEL_PATH,
+            "--config",     PIPER_CONFIG_PATH,
+            "--output_file", output_file,
         ],
         input=text.encode(),
         capture_output=True,
@@ -49,7 +108,10 @@ def tts_piper_to_file(text, output_file=VOICE_FILE):
     return output_file
 
 
-# ---- Llama 3 query ----
+# ─────────────────────────────────────────────
+#  Llama 3 query
+# ─────────────────────────────────────────────
+
 def ask_phi3(prompt, user_id):
     try:
         if user_id not in conversation_history:
@@ -58,9 +120,7 @@ def ask_phi3(prompt, user_id):
         conversation_history[user_id].append(f"User: {prompt}")
 
         if len(conversation_history[user_id]) > MAX_HISTORY * 2:
-            conversation_history[user_id] = conversation_history[user_id][
-                -(MAX_HISTORY * 2) :
-            ]
+            conversation_history[user_id] = conversation_history[user_id][-(MAX_HISTORY * 2):]
 
         full_prompt = "\n".join(conversation_history[user_id])
         response = requests.post(
@@ -76,7 +136,10 @@ def ask_phi3(prompt, user_id):
         return "Sorry, I had trouble thinking that one through. Try again!"
 
 
-# ---- Send long message helper ----
+# ─────────────────────────────────────────────
+#  Helpers
+# ─────────────────────────────────────────────
+
 async def send_long_message(channel, text):
     if len(text) <= 2000:
         await channel.send(text)
@@ -93,7 +156,6 @@ async def send_long_message(channel, text):
             await channel.send(chunk)
 
 
-# ---- Read file attachment helper ----
 async def read_attachment(attachment):
     try:
         file_bytes = await attachment.read()
@@ -105,7 +167,10 @@ async def read_attachment(attachment):
             return None
 
 
-# ---- Events ----
+# ─────────────────────────────────────────────
+#  Events
+# ─────────────────────────────────────────────
+
 @client.event
 async def on_ready():
     print(f"[DEBUG] Logged in as {client.user}")
@@ -113,14 +178,12 @@ async def on_ready():
 
 @client.event
 async def on_message(message):
-    print(
-        f"[DEBUG] Message from {message.author} ({message.author.id}): {message.content}"
-    )
+    print(f"[DEBUG] Message from {message.author} ({message.author.id}): {message.content}")
 
     if message.author == client.user:
         return
 
-    # ---- !ask (text only) ----
+    # ---- /ask (text only) ----
     if message.content.lower().startswith("/ask"):
         user_input = message.content[4:].strip()
 
@@ -134,9 +197,7 @@ async def on_message(message):
             file_content = await read_attachment(attachment)
 
             if file_content is None:
-                await message.channel.send(
-                    "Could not read that file — make sure it's a plain text file."
-                )
+                await message.channel.send("Could not read that file — make sure it's a plain text file.")
                 return
 
             if user_input:
@@ -145,36 +206,26 @@ async def on_message(message):
                 prompt = f"Please read the following file and summarize or respond to it:\n\n{file_content}"
         else:
             if not user_input:
-                await message.channel.send(
-                    "Please provide a prompt after `!ask`, or attach a file."
-                )
+                await message.channel.send("Please provide a prompt after `/ask`, or attach a file.")
                 return
             prompt = user_input
 
         await message.channel.send("Thinking...")
         loop = asyncio.get_event_loop()
-        response = await loop.run_in_executor(
-            executor, ask_phi3, prompt, message.author.id
-        )
+        response = await loop.run_in_executor(executor, ask_phi3, prompt, message.author.id)
         await send_long_message(message.channel, response)
         return
 
-    # ---- !say (text + WAV) ----
+    # ---- /say (text + WAV) ----
     if message.content.lower().startswith("/say"):
         user_input = message.content[4:].strip()
         if not user_input:
-            await message.channel.send(
-                "Provide a prompt after `!say` for Cyon to speak."
-            )
+            await message.channel.send("Provide a prompt after `/say` for Cyon to speak.")
             return
         await message.channel.send("Thinking...")
         loop = asyncio.get_event_loop()
-        response = await loop.run_in_executor(
-            executor, ask_phi3, user_input, message.author.id
-        )
-        # Send text reply
+        response = await loop.run_in_executor(executor, ask_phi3, user_input, message.author.id)
         await send_long_message(message.channel, response)
-        # Generate TTS WAV
         print(f"[DEBUG] Generating TTS for: {response[:50]}")
         try:
             await loop.run_in_executor(executor, tts_piper_to_file, response)
@@ -183,7 +234,6 @@ async def on_message(message):
             await message.channel.send("TTS generation failed.")
             return
 
-        # Send WAV and delete file
         print(f"[DEBUG] WAV exists: {os.path.exists(VOICE_FILE)}")
         if os.path.exists(VOICE_FILE):
             print(f"[DEBUG] WAV file size: {os.path.getsize(VOICE_FILE)} bytes")
@@ -198,7 +248,7 @@ async def on_message(message):
             await message.channel.send("Voice file missing after generation.")
         return
 
-    # ---- !clear ----
+    # ---- /clear ----
     if message.content.lower().strip() == "/clear":
         conversation_history.pop(message.author.id, None)
         await message.channel.send("Conversation history cleared!")
