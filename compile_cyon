@@ -342,7 +342,7 @@ setup_pyra_env() {
     python3 -m venv --system-site-packages ~/pyra_env
     source ~/pyra_env/bin/activate
     pip3 install --upgrade pip
-    pip3 install pyfiglet moviepy rich pillow cryptography pyautogui piper-tts
+    pip3 install pyfiglet moviepy rich pillow cryptography pyautogui piper-tts pathvalidate
     deactivate
     echo -e "${CYAN} pyra_env ready at ~/pyra_env${NC}"
     setup_piper_models
