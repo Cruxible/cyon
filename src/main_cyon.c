@@ -10,10 +10,28 @@
 #include <fcntl.h>
 #include "../include/downloader.h"
 static void ui_log(const char *fmt, ...);
-#define BOT_SCRIPT       "/home/cruxible/cyon/cyon_bot.py"
-#define LOCAL_BOT_SCRIPT "/home/cruxible/cyon/cyon_local.py"
-#define SHELL_SCRIPT      "/home/cruxible/cyon/cyon_shell.py"
-#define VENV_PYTHON      "/home/cruxible/pyra_env/bin/python3"
+/* Paths resolved at runtime — supports both AppImage (CYON_HOME) and source install */
+#define CYON_PATH_MAX (PATH_MAX * 2)
+static char BOT_SCRIPT[CYON_PATH_MAX];
+static char LOCAL_BOT_SCRIPT[CYON_PATH_MAX];
+static char SHELL_SCRIPT[CYON_PATH_MAX];
+static char VENV_PYTHON[CYON_PATH_MAX];
+
+static void resolve_paths(void) {
+    const char *cyon_home = getenv("CYON_HOME");
+    const char *home      = getenv("HOME");
+    const char *base      = cyon_home ? cyon_home : (home ? ({ static char b[PATH_MAX]; snprintf(b, sizeof(b), "%s/cyon", home); b; }) : "/cyon");
+
+    snprintf(BOT_SCRIPT,       sizeof(BOT_SCRIPT),       "%s/cyon_bot.py",    base);
+    snprintf(LOCAL_BOT_SCRIPT, sizeof(LOCAL_BOT_SCRIPT), "%s/cyon_local.py",  base);
+    snprintf(SHELL_SCRIPT,     sizeof(SHELL_SCRIPT),     "%s/cyon_shell.py",  base);
+
+    /* pyra_env always lives in ~/pyra_env regardless of install method */
+    if (home)
+        snprintf(VENV_PYTHON, sizeof(VENV_PYTHON), "%s/pyra_env/bin/python3", home);
+    else
+        snprintf(VENV_PYTHON, sizeof(VENV_PYTHON), "/usr/bin/python3");
+}
 /* ── Global process handles ─────────────────────────────────────────────── */
 static GPid ollama_pid = 0, bot_pid = 0, local_pid = 0, shell_pid = 0;
 static int  ollama_fd = -1, bot_fd = -1, local_stdout_fd = -1, local_stdin_fd = -1, shell_stdin_fd = -1, shell_stdout_fd = -1;
@@ -132,8 +150,18 @@ void launch_cli(GtkWidget *widget, gpointer data) {
 void launch_pyra(GtkWidget *widget, gpointer data) {
     char pyra_path[PATH_MAX];
     const char *home = getenv("HOME");
+    const char *cyon_home = getenv("CYON_HOME");
+
     if (!home) { g_print("Could not determine HOME directory.\n"); return; }
-    snprintf(pyra_path, sizeof(pyra_path), "%s/cyon/pyra_tool/pyra_toolz", home);
+
+    // AppImage: use bundled path via CYON_HOME
+    // Source install: fall back to ~/cyon/pyra_tool/pyra_toolz
+    if (cyon_home) {
+        snprintf(pyra_path, sizeof(pyra_path), "%s/pyra_tool/pyra_toolz", cyon_home);
+    } else {
+        snprintf(pyra_path, sizeof(pyra_path), "%s/cyon/pyra_tool/pyra_toolz", home);
+    }
+
     const char *terminals[] = {
         "mate-terminal", "x-terminal-emulator", "gnome-terminal",
         "xfce4-terminal", "lxterminal", "konsole", "xterm"
@@ -146,83 +174,48 @@ void launch_pyra(GtkWidget *widget, gpointer data) {
     g_print("No compatible terminal found to launch pyra.\n");
 }
 
-void open_gtk_convert(GtkWidget *widget, gpointer data) {
-    const char *home = getenv("HOME"); if (!home) return;
-    char cmd[PATH_MAX + 32];
-    snprintf(cmd, sizeof(cmd), "python3 %s/cyon/pyra_lib/gtk_lib/gtk_convert.py &", home);
-    system(cmd);
+void launch_repeater(GtkWidget *widget, gpointer data) {
+    const char *home      = getenv("HOME");
+    const char *cyon_home = getenv("CYON_HOME");
+    if (!home) { g_print("Could not determine HOME directory.\n"); return; }
+    const char *base = cyon_home ? cyon_home : ({ static char b[PATH_MAX]; snprintf(b, sizeof(b), "%s/cyon", home); b; });
+    char script[CYON_PATH_MAX];
+    snprintf(script, sizeof(script), "%s/pyra_lib/pyra_repeater.py", base);
+    const char *terminals[] = {
+        "mate-terminal", "x-terminal-emulator", "gnome-terminal",
+        "xfce4-terminal", "lxterminal", "konsole", "xterm"
+    };
+    for (int i = 0; i < (int)(sizeof(terminals)/sizeof(terminals[0])); i++) {
+        char cmd[CYON_PATH_MAX * 4];
+        snprintf(cmd, sizeof(cmd), "%s -e '%s %s'", terminals[i], VENV_PYTHON, script);
+        if (system(cmd) == 0) return;
+    }
+    g_print("No compatible terminal found to launch repeater.\n");
 }
 
-void create_tarfile(GtkWidget *widget, gpointer data) {
-    const char *home = getenv("HOME"); if (!home) return;
-    char cmd[PATH_MAX + 32];
-    snprintf(cmd, sizeof(cmd), "python3 %s/cyon/pyra_lib/gtk_lib/tarmaker_gtk3.py &", home);
-    system(cmd);
-}
+/* Helper macro for launching gtk_lib Python scripts */
+#define LAUNCH_PYLIB(script_name) \
+    do { \
+        const char *_home = getenv("HOME"); \
+        const char *_ch   = getenv("CYON_HOME"); \
+        if (!_home) return; \
+        const char *_base = _ch ? _ch : ({ static char _b[CYON_PATH_MAX]; snprintf(_b, sizeof(_b), "%s/cyon", _home); _b; }); \
+        char _cmd[CYON_PATH_MAX * 2]; \
+        snprintf(_cmd, sizeof(_cmd), "python3 %s/pyra_lib/gtk_lib/%s &", _base, script_name); \
+        system(_cmd); \
+    } while(0)
 
-void open_piper_tts(GtkWidget *widget, gpointer data) {
-    const char *home = getenv("HOME");
-    if (!home) return;
-    char cmd[PATH_MAX + 64];
-    snprintf(cmd, sizeof(cmd), "python3 %s/cyon/pyra_lib/gtk_lib/cyon_tts.py &", home);
-    system(cmd);
-}
-
-void open_pyra_player(GtkWidget *widget, gpointer data) {
-    const char *home = getenv("HOME"); if (!home) return;
-    char cmd[PATH_MAX + 32];
-    snprintf(cmd, sizeof(cmd), "python3 %s/cyon/pyra_lib/gtk_lib/pyra_player.py &", home);
-    system(cmd);
-}
-
-void open_cut_video(GtkWidget *widget, gpointer data) {
-    const char *home = getenv("HOME"); if (!home) return;
-    char cmd[PATH_MAX + 32];
-    snprintf(cmd, sizeof(cmd), "python3 %s/cyon/pyra_lib/gtk_lib/cut_video.py &", home);
-    system(cmd);
-}
-
-void open_extract_audio(GtkWidget *widget, gpointer data) {
-    const char *home = getenv("HOME"); if (!home) return;
-    char cmd[PATH_MAX + 32];
-    snprintf(cmd, sizeof(cmd), "python3 %s/cyon/pyra_lib/gtk_lib/extract_audio.py &", home);
-    system(cmd);
-}
-
-void open_cut_audio(GtkWidget *widget, gpointer data) {
-    const char *home = getenv("HOME"); if (!home) return;
-    char cmd[PATH_MAX + 32];
-    snprintf(cmd, sizeof(cmd), "python3 %s/cyon/pyra_lib/gtk_lib/cut_audio.py &", home);
-    system(cmd);
-}
-
-void open_merge_aud_vid(GtkWidget *widget, gpointer data) {
-    const char *home = getenv("HOME"); if (!home) return;
-    char cmd[PATH_MAX + 32];
-    snprintf(cmd, sizeof(cmd), "python3 %s/cyon/pyra_lib/gtk_lib/merge_aud_vid.py &", home);
-    system(cmd);
-}
-
-void open_adjust_volume(GtkWidget *widget, gpointer data) {
-    const char *home = getenv("HOME"); if (!home) return;
-    char cmd[PATH_MAX + 32];
-    snprintf(cmd, sizeof(cmd), "python3 %s/cyon/pyra_lib/gtk_lib/adjust_volume.py &", home);
-    system(cmd);
-}
-
-void open_concat_vid(GtkWidget *widget, gpointer data) {
-    const char *home = getenv("HOME"); if (!home) return;
-    char cmd[PATH_MAX + 32];
-    snprintf(cmd, sizeof(cmd), "python3 %s/cyon/pyra_lib/gtk_lib/concat_vid.py &", home);
-    system(cmd);
-}
-
-void open_concat_aud(GtkWidget *widget, gpointer data) {
-    const char *home = getenv("HOME"); if (!home) return;
-    char cmd[PATH_MAX + 32];
-    snprintf(cmd, sizeof(cmd), "python3 %s/cyon/pyra_lib/gtk_lib/concat_aud.py &", home);
-    system(cmd);
-}
+void open_gtk_convert(GtkWidget *widget, gpointer data)  { LAUNCH_PYLIB("gtk_convert.py"); }
+void create_tarfile(GtkWidget *widget, gpointer data)     { LAUNCH_PYLIB("tarmaker_gtk3.py"); }
+void open_piper_tts(GtkWidget *widget, gpointer data)     { LAUNCH_PYLIB("cyon_tts.py"); }
+void open_pyra_player(GtkWidget *widget, gpointer data)   { LAUNCH_PYLIB("pyra_player.py"); }
+void open_cut_video(GtkWidget *widget, gpointer data)     { LAUNCH_PYLIB("cut_video.py"); }
+void open_extract_audio(GtkWidget *widget, gpointer data) { LAUNCH_PYLIB("extract_audio.py"); }
+void open_cut_audio(GtkWidget *widget, gpointer data)     { LAUNCH_PYLIB("cut_audio.py"); }
+void open_merge_aud_vid(GtkWidget *widget, gpointer data) { LAUNCH_PYLIB("merge_aud_vid.py"); }
+void open_adjust_volume(GtkWidget *widget, gpointer data) { LAUNCH_PYLIB("adjust_volume.py"); }
+void open_concat_vid(GtkWidget *widget, gpointer data)    { LAUNCH_PYLIB("concat_vid.py"); }
+void open_concat_aud(GtkWidget *widget, gpointer data)    { LAUNCH_PYLIB("concat_aud.py"); }
 
 void tool_a(GtkWidget *widget, gpointer data) { g_print("Tool A selected.\n"); }
 void tool_b(GtkWidget *widget, gpointer data) { g_print("Tool B selected.\n"); }
@@ -389,7 +382,13 @@ static void stop_all(GtkWidget *b, gpointer d) {
 /* ── Main ───────────────────────────────────────────────────────────────── */
 int main(int argc, char *argv[]) {
     gtk_init(&argc, &argv);
-    system("ffplay -nodisp -autoexit /home/cruxible/cyon/assets/intro_sound.mp3 &");
+    resolve_paths();
+    const char *cyon_home = getenv("CYON_HOME");
+    const char *home      = getenv("HOME");
+    const char *base      = cyon_home ? cyon_home : (home ? ({ static char b[PATH_MAX]; snprintf(b, sizeof(b), "%s/cyon", home); b; }) : "/cyon");
+    char intro_cmd[PATH_MAX + 64];
+    snprintf(intro_cmd, sizeof(intro_cmd), "ffplay -nodisp -autoexit %s/assets/intro_sound.mp3 &", base);
+    system(intro_cmd);
     GtkCssProvider *provider = gtk_css_provider_new();
     gtk_css_provider_load_from_data(provider, CSS, -1, NULL);
     gtk_style_context_add_provider_for_screen(gdk_screen_get_default(), GTK_STYLE_PROVIDER(provider), 800);
@@ -510,10 +509,13 @@ int main(int argc, char *argv[]) {
 
     GtkWidget *scanner_item = gtk_menu_item_new_with_label("Port Scanner");
     GtkWidget *dns_item = gtk_menu_item_new_with_label("DNS Lookup");
+    GtkWidget *repeater_item = gtk_menu_item_new_with_label("Pyra Repeater");
     gtk_menu_shell_append(GTK_MENU_SHELL(offense_menu), scanner_item);
     gtk_menu_shell_append(GTK_MENU_SHELL(offense_menu), dns_item);
+    gtk_menu_shell_append(GTK_MENU_SHELL(offense_menu), repeater_item);
     g_signal_connect(scanner_item, "activate", G_CALLBACK(port_scanner), NULL);
     g_signal_connect(dns_item, "activate", G_CALLBACK(dns_lookup), NULL);
+    g_signal_connect(repeater_item, "activate", G_CALLBACK(launch_repeater), NULL);
 
     gtk_menu_shell_append(GTK_MENU_SHELL(security_menu), defense_item);
     gtk_menu_shell_append(GTK_MENU_SHELL(security_menu), offense_item);
