@@ -11,8 +11,272 @@ add_path_to_bashrc() {
     END="# <<< Pyra Tool PATH <<<"
     if ! grep -q "$START" ~/.bashrc; then
         echo -e "${CYAN}Adding Pyra and cyon/bin directories to PATH in ~/.bashrc${NC}"
-        cat >> ~/.bashrc <<EOF
+        cat >> ~/.bashrc <<'EOF'
+
 $START
+# my additions_____________________________________
+# Cyberpunk cyan color scheme for ls
+LS_COLORS=$LS_COLORS:'di=1;38;5;51:'   # Directories in bold bright cyan
+LS_COLORS=$LS_COLORS:'ex=1;38;5;46:'   # Executables in bright green
+LS_COLORS=$LS_COLORS:'ln=1;38;5;201:'  # Symlinks in magenta
+LS_COLORS=$LS_COLORS:'*.sh=38;5;45:'   # Shell scripts in cyan-blue
+LS_COLORS=$LS_COLORS:'*.py=38;5;45:'   # Python files in cyan-blue
+LS_COLORS=$LS_COLORS:'*.txt=38;5;240:' # Text files in dark grey
+LS_COLORS=$LS_COLORS:'or=1;38;5;196:'  # Broken symlinks in red (warning)
+LS_COLORS=$LS_COLORS:'mi=1;38;5;196:'  # Missing files in red (warning)
+export LS_COLORS
+
+function start_shell_or_venv() {
+
+    # === CYBERPUNK COLOR PALETTE ===
+    CYAN="\033[38;5;51m"
+    CYAN_DIM="\033[38;5;45m"
+    CYAN_DARK="\033[38;5;30m"
+    GREEN="\033[38;5;46m"
+    GREEN_DIM="\033[38;5;34m"
+    MAGENTA="\033[38;5;201m"
+    YELLOW="\033[38;5;226m"
+    WHITE="\033[38;5;231m"
+    GREY="\033[38;5;240m"
+    RESET="\033[0m"
+    BOLD="\033[1m"
+    BLINK="\033[5m"
+
+    # === SPINNER FUNCTION ===
+    spin() {
+        local pid=$1
+        local delay=0.07
+        local spinstr='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+        local i=0
+        while kill -0 "$pid" 2>/dev/null; do
+            local char="${spinstr:$i:1}"
+            echo -ne "\r ${CYAN}${char}${RESET}"
+            i=$(( (i+1) % ${#spinstr} ))
+            sleep $delay
+        done
+        echo -ne "\r   \r"
+    }
+
+    # === SCROLLING HACKER PHRASES ===
+    scroll_phrases() {
+        local phrases=(
+            "// there is no patch for human stupidity"
+            "rm -rf /bad_decisions"
+            "sudo make me a sandwich"
+            "git commit -m 'fixed the thing'"
+            "// it works on my machine"
+            "while true; do coffee; done"
+            "grep -r 'meaning' /life  # no results"
+            "cat /dev/urandom | grep sanity"
+            "alias reality='vim /etc/simulation'"
+            "chmod 777 /my/soul"
+            "ERROR: keyboard not found — press F1 to continue"
+            "// TODO: sleep someday"
+            "ping -c 1 existence  # host unreachable"
+            "echo 'hello world' >> /dev/null"
+            "ssh root@mainframe -i ~/.ssh/vibes"
+            "// segfault is just the computer crying"
+            "sudo apt install motivation  # package not found"
+            "kill -9 \$(pgrep -f impostor_syndrome)"
+            "traceroute to enlightenment... timed out"
+            "git push origin chaos"
+        )
+
+        local phrase="${phrases[$((RANDOM % ${#phrases[@]}))]}"
+        local len=${#phrase}
+        local cols=$(tput cols 2>/dev/null || echo 80)
+        local pad=$(( (cols - len) / 2 ))
+        [ $pad -lt 0 ] && pad=0
+
+        # scroll right to left across the line
+        local scroll_width=$(( cols + len ))
+        echo ""
+        for (( pos=cols; pos>=-len; pos-=2 )); do
+            local spaces=""
+            if [ $pos -gt 0 ]; then
+                spaces=$(printf '%*s' "$pos" '')
+            fi
+            echo -ne "\r${GREY}${spaces}${GREEN_DIM}${phrase}${RESET}   "
+            sleep 0.018
+        done
+        echo -ne "\r$(printf '%*s' "$cols" '')  \r"
+    }
+
+    # === BOOT SEQUENCE ===
+    boot_sequence() {
+        local msgs=(
+            "INITIALIZING NEURAL LINK............"
+            "BYPASSING ICE LAYER................."
+            "AUTHENTICATING RETINAL SCAN........."
+            "DECRYPTING KERNEL MANIFOLD.........."
+            "JACKING INTO THE GRID..............."
+        )
+        for msg in "${msgs[@]}"; do
+            echo -ne " ${CYAN_DIM}${msg}${RESET}"
+            sleep 0.12
+            echo -e " ${GREEN}[OK]${RESET}"
+        done
+    }
+
+    # === GLITCH EFFECT ON TEXT ===
+    glitch_print() {
+        local text="$1"
+        local color="$2"
+        local glitch_chars='!@#$%^&*<>?/|\\~`'
+        echo -ne " ${color}"
+        for (( i=0; i<${#text}; i++ )); do
+            local ch="${text:$i:1}"
+            if [[ "$ch" != " " ]] && (( RANDOM % 6 == 0 )); then
+                local gc="${glitch_chars:$((RANDOM % ${#glitch_chars})):1}"
+                echo -ne "${MAGENTA}${gc}${color}"
+                sleep 0.01
+                echo -ne "\b${ch}"
+            else
+                echo -ne "${ch}"
+            fi
+            sleep 0.005
+        done
+        echo -e "${RESET}"
+    }
+
+    # === CYAN ASCII ART: "CYON" ===
+    print_cyon() {
+        echo -e "${CYAN}${BOLD}"
+        echo -e "   ██████╗██╗   ██╗ ██████╗ ███╗   ██╗"
+        echo -e "  ██╔════╝╚██╗ ██╔╝██╔═══██╗████╗  ██║"
+        echo -e "  ██║      ╚████╔╝ ██║   ██║██╔██╗ ██║"
+        echo -e "  ██║       ╚██╔╝  ██║   ██║██║╚██╗██║"
+        echo -e "  ╚██████╗   ██║   ╚██████╔╝██║ ╚████║"
+        echo -e "   ╚═════╝   ╚═╝    ╚═════╝ ╚═╝  ╚═══╝"
+        echo -e "${RESET}"
+    }
+
+    # === DECORATIVE BORDER ===
+    cyber_border() {
+        local cols=$(tput cols 2>/dev/null || echo 80)
+        local border=""
+        for (( i=0; i<cols-2; i++ )); do
+            if (( i % 4 == 0 )); then border+="▓"
+            elif (( i % 4 == 1 )); then border+="░"
+            elif (( i % 4 == 2 )); then border+="▒"
+            else border+="░"; fi
+        done
+        echo -e " ${CYAN_DARK}${border}${RESET}"
+    }
+
+    # ============================================================
+    # MAIN INTRO SEQUENCE
+    # ============================================================
+    clear
+
+    cyber_border
+
+    # Spinning boot loader
+    (sleep 1.2) &
+    local boot_pid=$!
+    echo -ne " ${CYAN}SYSTEM BOOT${RESET}"
+    spin $boot_pid
+    wait $boot_pid
+
+    boot_sequence
+    sleep 0.1
+    scroll_phrases
+    sleep 0.1
+
+    cyber_border
+    print_cyon
+    cyber_border
+
+    # Glitchy tagline
+    glitch_print "  ░ L I N U X ░  [ CYBERDECK ONLINE ]" "${CYAN}"
+    echo ""
+
+    # ============================================================
+    # MAIN MENU LOOP
+    # ============================================================
+    while true; do
+        local user=$USER
+        local current_dir=$PWD
+        local pc_name=$HOSTNAME
+
+        # Pulse spinner beside menu header
+        echo -e "\n ${CYAN}▓▒░ ${WHITE}COMMAND MATRIX${CYAN} ░▒▓${RESET}"
+        echo -e " ${CYAN_DIM}┌─────────────────────────┐${RESET}"
+        echo -e " ${CYAN_DIM}│${CYAN}  ⟁  ${WHITE}shell${RESET}             ${CYAN_DIM}│${RESET}"
+        echo -e " ${CYAN_DIM}│${CYAN}  ⟁  ${WHITE}start tinycrux${RESET}    ${CYAN_DIM}│${RESET}"
+        echo -e " ${CYAN_DIM}│${CYAN}  ⟁  ${WHITE}stop tinycrux${RESET}     ${CYAN_DIM}│${RESET}"
+        echo -e " ${CYAN_DIM}│${CYAN}  ⟁  ${WHITE}pyra_env${RESET}          ${CYAN_DIM}│${RESET}"
+        echo -e " ${CYAN_DIM}│${CYAN}  ⟁  ${WHITE}pyserver${RESET}          ${CYAN_DIM}│${RESET}"
+        echo -e " ${CYAN_DIM}│${CYAN}  ⟁  ${WHITE}pi ssh${RESET}            ${CYAN_DIM}│${RESET}"
+        echo -e " ${CYAN_DIM}│${CYAN}  ⟁  ${WHITE}droid ssh${RESET}         ${CYAN_DIM}│${RESET}"
+        echo -e " ${CYAN_DIM}│${MAGENTA}  ⟁  ${WHITE}exit${RESET}              ${CYAN_DIM}│${RESET}"
+        echo -e " ${CYAN_DIM}└─────────────────────────┘${RESET}"
+        echo -e " ${CYAN_DARK}____________________________${RESET}"
+        echo -ne " ${CYAN}┌░${RESET}${current_dir}${CYAN}░${RESET}\n ${CYAN}└░${RESET}${user}${CYAN}@${RESET}${pc_name}"
+        read -p "░ " input
+
+        case "$input" in
+          "shell")
+            scroll_phrases
+            neofetch
+            echo -e " ${CYAN}$(date)${RESET}"
+            break
+            ;;
+          "start tinycrux")
+            glitch_print "  INITIATING TINYCRUX UPLINK..." "${CYAN}"
+            (sleep 0.8) & spin $!; wait $!
+            sudo systemctl start ollama
+            ollama run phi3
+            break
+            ;;
+          "stop tinycrux")
+            glitch_print "  SEVERING TINYCRUX LINK..." "${MAGENTA}"
+            (sleep 0.6) & spin $!; wait $!
+            sudo systemctl stop ollama
+            break
+            ;;
+          "pyra_env")
+            glitch_print "  LOADING PYRA VIRTUAL ENV..." "${GREEN}"
+            (sleep 0.8) & spin $!; wait $!
+            scroll_phrases
+            neofetch
+            echo -e " ${CYAN}$(date)${RESET}"
+            source ~/pyra_env/bin/activate
+            echo -e "${CYAN} executables:\n  pyra_toolz\n${RESET}"
+            break
+            ;;
+          "pyserver")
+            glitch_print "  SPINNING UP PYTHON SERVER..." "${GREEN}"
+            (sleep 0.5) & spin $!; wait $!
+            python3 -m http.server -b 0.0.0.0
+            break
+            ;;
+          "pi ssh")
+            glitch_print "  ESTABLISHING SECURE CHANNEL TO PI..." "${CYAN}"
+            (sleep 0.5) & spin $!; wait $!
+            ssh jonathan@192.168.1.212
+            break
+            ;;
+          "droid ssh")
+            glitch_print "  JACKING INTO DROID NODE..." "${CYAN}"
+            (sleep 0.5) & spin $!; wait $!
+            ssh u0_a275@192.168.1.200 -p 8022
+            break
+            ;;
+          "exit")
+            glitch_print "  DISCONNECTING FROM THE GRID..." "${MAGENTA}"
+            (sleep 0.5) & spin $!; wait $!
+            echo -e " ${GREY}// goodbye, operator.${RESET}\n"
+            exit
+            ;;
+          *)
+            echo -e " ${MAGENTA}ERROR:${RESET} ${GREY}// unknown command — try again, operator${RESET}"
+            ;;
+        esac
+    done
+}
+
+start_shell_or_venv
 for dir in "\$HOME/cyon/bin" "\$HOME/cyon/pyra_tool"; do
     if [ -d "\$dir" ]; then
         case ":\$PATH:" in
@@ -78,10 +342,58 @@ setup_pyra_env() {
     python3 -m venv --system-site-packages ~/pyra_env
     source ~/pyra_env/bin/activate
     pip3 install --upgrade pip
-    pip3 install pyfiglet moviepy rich pillow cryptography pyautogui
+    pip3 install pyfiglet moviepy rich pillow cryptography pyautogui piper-tts
     deactivate
     echo -e "${CYAN} pyra_env ready at ~/pyra_env${NC}"
+    setup_piper_models
 }
+
+setup_piper_models() {
+    echo -e "${CYAN} Setting up Piper voice models...${NC}"
+    mkdir -p ~/cyon/piper_models
+    cd ~/cyon/piper_models
+
+    if ls *.onnx 2>/dev/null | grep -q onnx; then
+        echo -e "${CYAN} Piper models already present — skipping download.${NC}"
+        return
+    fi
+
+    echo -e "${CYAN} Select a Piper voice to download:${NC}"
+    echo -e "${CYAN} 1) en_US-joe-medium (male)${NC}"
+    echo -e "${CYAN} 2) en_US-lessac-medium (male)${NC}"
+    echo -e "${CYAN} 3) en_US-amy-medium (female)${NC}"
+    echo -e "${CYAN} 4) Skip${NC}"
+    read -p $' \033[0;36mSelect a voice [1-4]: \033[0m' voice_choice
+
+    case $voice_choice in
+        1)
+            wget -q --show-progress https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/joe/medium/en_US-joe-medium.onnx
+            wget -q --show-progress https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/joe/medium/en_US-joe-medium.onnx.json
+            echo -e "${CYAN} Downloaded en_US-joe-medium${NC}"
+            echo -e "${CYAN} Set in ~/cyon/cyon_config.ini: model = en_US-joe-medium.onnx${NC}"
+            ;;
+        2)
+            wget -q --show-progress https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx
+            wget -q --show-progress https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json
+            echo -e "${CYAN} Downloaded en_US-lessac-medium${NC}"
+            echo -e "${CYAN} Set in ~/cyon/cyon_config.ini: model = en_US-lessac-medium.onnx${NC}"
+            ;;
+        3)
+            wget -q --show-progress https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx
+            wget -q --show-progress https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx.json
+            echo -e "${CYAN} Downloaded en_US-amy-medium${NC}"
+            echo -e "${CYAN} Set in ~/cyon/cyon_config.ini: model = en_US-amy-medium.onnx${NC}"
+            ;;
+        4)
+            echo -e "${CYAN} Skipping — download models manually to ~/cyon/piper_models/${NC}"
+            ;;
+        *)
+            echo -e "${RED} Invalid option — skipping voice download.${NC}"
+            ;;
+    esac
+    echo -e "${CYAN} Piper setup complete.${NC}"
+}
+
 compile_pyra_toolz() {
     echo -e "${CYAN} Compiling pyra_toolz...${NC}"
     sudo apt install -y yt-dlp
@@ -153,16 +465,17 @@ while true; do
     echo -e "${CYAN}    Build System${NC}"
     echo -e "${CYAN} ==============================${NC}"
     echo -e "${CYAN} 1) Compile cyon desktop${NC}"
-    echo -e "${CYAN} 2) Setup pyra_env${NC}"
+    echo -e "${CYAN} 2) Setup pyra_env + Piper${NC}"
     echo -e "${CYAN} 3) Compile pyra_toolz${NC}"
     echo -e "${CYAN} 4) Compile pyra_termux${NC}"
     echo -e "${CYAN} 5) Compile all${NC}"
     echo -e "${CYAN} 6) Add Cyon/Pyra PATH to ~/.bashrc${NC}"
-    echo -e "${RED} 7) Remove Pyra PATH from ~/.bashrc${NC}"
-    echo -e "${RED} 8) Uninstall Cyon${NC}"
-    echo -e "${RED} 9) Exit${NC}"
+    echo -e "${CYAN} 7) Setup Piper voices only${NC}"
+    echo -e "${RED} 8) Remove Pyra PATH from ~/.bashrc${NC}"
+    echo -e "${RED} 9) Uninstall Cyon${NC}"
+    echo -e "${RED} 0) Exit${NC}"
     echo -e "${CYAN} ==============================${NC}"
-    read -p $' \033[0;36mSelect an option [1-9]: \033[0m' choice
+    read -p $' \033[0;36mSelect an option [0-9]: \033[0m' choice
     case $choice in
         1)
             install_desktop_dependencies
@@ -180,9 +493,10 @@ while true; do
             echo -e "${CYAN} All binaries compiled successfully.${NC}"
             ;;
         6) add_path_to_bashrc ;;
-        7) remove_path_from_bashrc ;;
-        8) uninstall_cyon ;;
-        9)
+        7) setup_piper_models ;;
+        8) remove_path_from_bashrc ;;
+        9) uninstall_cyon ;;
+        0)
             echo -e "${RED} Exiting. Later!${NC}"
             exit 0
             ;;
