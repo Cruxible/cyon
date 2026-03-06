@@ -1,7 +1,7 @@
 # 🌀 Cyon
 Cyon is a hybrid GTK and CLI-based desktop tool built in C. It serves as a control panel for local AI (Ollama + Llama 3), a Discord bot manager, a media downloader, and a launcher for a suite of Python utility tools. It is lightweight, hacker-themed, and extensible.
 
-> Currently under active development. WARNING - New installation process needs testing. Install at your own risk unitl testing confirmed.
+> Currently under active development.
 
 ---
 
@@ -20,6 +20,51 @@ Cyon is a hybrid GTK and CLI-based desktop tool built in C. It serves as a contr
 - ✅ gtk_lib — GTK-based audio/video editing suite and media tools
 - ✅ Cyon TTS — text-to-speech tool (Piper)
 - ✅ Pyra Player — GTK media player
+
+---
+
+## 🚀 Quick Install (AppImage)
+
+The easiest way to run Cyon — no compiling required:
+
+1. Download the latest `cyon-vX.X.X-YYYY-MM-DD-x86_64.AppImage` from the [Releases](../../releases) page
+2. Make it executable and run it:
+```bash
+chmod +x cyon-vX.X.X-YYYY-MM-DD-x86_64.AppImage
+./cyon-vX.X.X-YYYY-MM-DD-x86_64.AppImage
+```
+
+On first launch the AppImage will automatically:
+- Create `~/cyon/` and set up `~/pyra_env`
+- Install all Python dependencies
+- Add Cyon to your PATH in `~/.bashrc`
+- Create a `.desktop` launcher so Cyon appears in your app menu
+
+> ⚠️ **Ollama must be installed separately** — [ollama.com](https://ollama.com). It's too large to bundle.
+
+---
+
+## ⚙️ Configuration (cyon_config.ini)
+
+Cyon stores user configuration in `~/cyon/cyon_config.ini`. This file is created automatically on first run with placeholder values. Open it in any text editor and fill in your details:
+
+```ini
+[discord]
+# Your Discord bot token from discord.com/developers
+token = YOUR_BOT_TOKEN_HERE
+
+# Your personal Discord user ID (right-click your name → Copy User ID)
+# Requires Developer Mode enabled in Discord settings
+user_id = YOUR_USER_ID_HERE
+
+[piper]
+# TTS voice model filename (must be in ~/cyon/piper_models/)
+model = en_US-joe-medium.onnx
+```
+
+> ⚠️ **Never share or commit `cyon_config.ini`** — your Discord token is a password. It is already in `.gitignore`.
+
+See `cyon_config.ini.example` in the repo for the full format.
 
 ---
 
@@ -68,7 +113,7 @@ source ~/pyra_env/bin/activate
 pip3 install discord.py
 deactivate
 ```
-Add your bot token to `cyon_bot.py`. Create a bot at [discord.com/developers](https://discord.com/developers).
+Create a bot at [discord.com/developers](https://discord.com/developers), then add your token and user ID to `~/cyon/cyon_config.ini`. See the [Configuration](#️-configuration-cyon_configini) section above.
 
 ---
 
