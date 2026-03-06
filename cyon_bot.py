@@ -62,8 +62,9 @@ TOKEN, AUTHORIZED_USER_ID, PIPER_MODEL_NAME = load_config()
 #  Piper paths — resolved from ~/cyon/piper_models/
 # ─────────────────────────────────────────────
 
-CYON_DIR        = os.path.expanduser("~/cyon")
-PIPER_MODELS    = os.path.join(CYON_DIR, "piper_models")
+CYON_DIR          = os.path.expanduser("~/cyon")
+PIPER_BIN         = os.path.join(CYON_DIR, "piper", "piper")
+PIPER_MODELS      = os.path.join(CYON_DIR, "piper_models")
 PIPER_MODEL_PATH  = os.path.join(PIPER_MODELS, PIPER_MODEL_NAME)
 PIPER_CONFIG_PATH = os.path.join(PIPER_MODELS, PIPER_MODEL_NAME + ".json")
 VOICE_FILE        = os.path.join(PIPER_MODELS, "voice.wav")
@@ -92,7 +93,7 @@ def tts_piper_to_file(text, output_file=VOICE_FILE):
 
     result = subprocess.run(
         [
-            "piper",
+            PIPER_BIN,
             "--model",      PIPER_MODEL_PATH,
             "--config",     PIPER_CONFIG_PATH,
             "--output_file", output_file,
