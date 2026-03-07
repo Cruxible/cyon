@@ -356,11 +356,9 @@ install_piper_binary() {
     sudo apt install -y python3-pip ffmpeg libsndfile1
     sudo apt install -y alsa-utils pulseaudio-utils
 
-    pip3 install piper-tts
-    pip3 install --upgrade piper-tts onnxruntime pathvalidate
-    pip3 install onnxruntime
+    ~/pyra_env/bin/pip install --upgrade piper-tts onnxruntime pathvalidate
 
-    echo -e "${CYAN} Piper installed via pip3.${NC}"
+    echo -e "${CYAN} Piper installed into pyra_env.${NC}"
 }
 
 setup_piper_models() {
@@ -475,7 +473,7 @@ while true; do
             install_desktop_dependencies
             compile_cyon_desktop
             ;;
-        2) setup_pyra_env ; install_piper_binary ; setup_piper_models ;;
+        2) setup_pyra_env ;;
         3) compile_pyra_toolz ;;
         4) compile_pyra_termux ;;
         5)
