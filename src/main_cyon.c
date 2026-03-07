@@ -209,6 +209,7 @@ void open_gtk_convert(GtkWidget *widget, gpointer data)  { LAUNCH_PYLIB("gtk_con
 void create_tarfile(GtkWidget *widget, gpointer data)     { LAUNCH_PYLIB("tarmaker_gtk3.py"); }
 void open_piper_tts(GtkWidget *widget, gpointer data)     { LAUNCH_PYLIB("cyon_tts.py"); }
 void open_pyra_player(GtkWidget *widget, gpointer data)   { LAUNCH_PYLIB("pyra_player.py"); }
+void open_cyon_matrix(GtkWidget *widget, gpointer data)   { LAUNCH_PYLIB("cyon_matrix.py"); }
 void open_cut_video(GtkWidget *widget, gpointer data)     { LAUNCH_PYLIB("cut_video.py"); }
 void open_extract_audio(GtkWidget *widget, gpointer data) { LAUNCH_PYLIB("extract_audio.py"); }
 void open_cut_audio(GtkWidget *widget, gpointer data)     { LAUNCH_PYLIB("cut_audio.py"); }
@@ -429,6 +430,10 @@ int main(int argc, char *argv[]) {
     GtkWidget *downloader_item = gtk_menu_item_new_with_label("Downloader");
     gtk_menu_shell_append(GTK_MENU_SHELL(programs_menu), downloader_item);
     g_signal_connect(downloader_item, "activate", G_CALLBACK(open_downloader), NULL);
+
+    GtkWidget *cyon_matrix_item = gtk_menu_item_new_with_label("Cyon Matrix");
+    gtk_menu_shell_append(GTK_MENU_SHELL(programs_menu), cyon_matrix_item);
+    g_signal_connect(cyon_matrix_item, "activate", G_CALLBACK(open_cyon_matrix), NULL);
 
     GtkWidget *cli_item = gtk_menu_item_new_with_label("Cyon CLI");
     gtk_menu_shell_append(GTK_MENU_SHELL(programs_menu), cli_item);
