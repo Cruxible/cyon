@@ -459,7 +459,7 @@ while true; do
     echo -e "${CYAN}    Build System${NC}"
     echo -e "${CYAN} ==============================${NC}"
     echo -e "${CYAN} 1) Compile cyon desktop${NC}"
-    echo -e "${CYAN} 2) Setup pyra_env + Piper${NC}"
+    echo -e "${CYAN} 2) Setup pyra_env${NC}"
     echo -e "${CYAN} 3) Compile pyra_toolz${NC}"
     echo -e "${CYAN} 4) Compile pyra_termux${NC}"
     echo -e "${CYAN} 5) Compile all${NC}"
