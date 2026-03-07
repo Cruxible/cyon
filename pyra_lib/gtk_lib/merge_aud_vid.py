@@ -79,8 +79,12 @@ class AudioVideoMerger:
     def merge(video_path, audio_path, output_path):
         video = VideoFileClip(video_path)
         audio = AudioFileClip(audio_path)
-        final_clip = video.with_audio(audio)
-        final_clip.write_videofile(output_path)
+        try:
+            final_clip = video.with_audio(audio)
+            final_clip.write_videofile(output_path)
+        finally:
+            audio.close()
+            video.close()
 
 
 class FileChooser_Merge(Gtk.ApplicationWindow):

@@ -279,9 +279,15 @@ class CMatrixWindow(Gtk.ApplicationWindow):
 
         # key handler
         self.connect("key-press-event", self._on_key)
+        self.connect("delete-event", self._on_close)
         self._paused = False
 
         self.show_all()
+
+    # ── close ─────────────────────────────────────────────────────────────────
+    def _on_close(self, widget, event):
+        self._matrix.stop()
+        return False
 
     # ── pause / resume ────────────────────────────────────────────────────────
     def _toggle_pause(self, _btn):

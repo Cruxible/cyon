@@ -210,7 +210,13 @@ class PiperTTSWindow(Gtk.ApplicationWindow):
     def run_piper(self, text, voice_key):
         """Run Piper TTS to generate voice.wav"""
         voice_info = VOICES[voice_key]
-        PIPER_EXE    = str(Path.home() / "cyon" / "piper" / "piper")
+        # Find piper binary — check pyra_env first, then ~/cyon/piper/, then system PATH
+        _piper_locations = [
+            Path.home() / "pyra_env" / "bin" / "piper",
+            Path.home() / "cyon" / "piper" / "piper",
+            Path.home() / "cyon" / "piper_models" / "piper",
+        ]
+        PIPER_EXE = next((str(p) for p in _piper_locations if p.is_file()), "piper")
         MODELS_DIR   = Path.home() / "cyon/piper_models"
         PIPER_MODEL  = str(MODELS_DIR / voice_info["model"])
         PIPER_CONFIG = str(MODELS_DIR / voice_info["config"])

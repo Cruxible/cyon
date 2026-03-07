@@ -90,7 +90,9 @@ class VideoCutter:
     @staticmethod
     def get_duration(filepath):
         clip = VideoFileClip(filepath)
-        return clip.duration
+        duration = clip.duration
+        clip.close()
+        return duration
 
     @staticmethod
     def cut(input_path, output_path, start_time, end_time):

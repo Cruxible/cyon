@@ -106,31 +106,39 @@ class Downloader:
         return "\n".join(formats) if formats else "No formats found."
 
     @staticmethod
-    def download_video(url, format_code, output_filename, on_update):
+    def download_video(url, format_code, output_filename, on_update, proc_callback=None):
         process = subprocess.Popen(
             ["yt-dlp", "-f", format_code, "-o", output_filename, url],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
         )
+        if proc_callback:
+            proc_callback(process)
         while True:
             output = process.stdout.readline()
             if output == "" and process.poll() is not None:
                 break
             if output:
                 GLib.idle_add(on_update, output.strip())
+        if proc_callback:
+            proc_callback(None)
         GLib.idle_add(on_update, f"▸ Saved: {output_filename}")
 
     @staticmethod
-    def download_audio(url, output_filename, on_update):
+    def download_audio(url, output_filename, on_update, proc_callback=None):
         process = subprocess.Popen(
             ["yt-dlp", "-x", "--audio-format=mp3", "-o", output_filename, url],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
         )
+        if proc_callback:
+            proc_callback(process)
         while True:
             output = process.stdout.readline()
             if output == "" and process.poll() is not None:
                 break
             if output:
                 GLib.idle_add(on_update, output.strip())
+        if proc_callback:
+            proc_callback(None)
         GLib.idle_add(on_update, f"▸ Saved: {output_filename}")
 
 
@@ -140,6 +148,7 @@ class DownloaderWindow(Gtk.ApplicationWindow):
         self.set_default_size(500, 380)
         self.set_border_width(0)
         self.treeview_window = treeview_window
+        self._active_proc = None
         self.connect("delete-event", self.on_delete_event)
 
         # Apply CSS
@@ -217,6 +226,8 @@ class DownloaderWindow(Gtk.ApplicationWindow):
         self.log_view.scroll_to_iter(self.log_buffer.get_end_iter(), 0, False, 0, 0)
 
     def on_delete_event(self, widget, event):
+        if self._active_proc and self._active_proc.poll() is None:
+            self._active_proc.terminate()
         self.destroy()
         if self.treeview_window is not None:
             self.treeview_window.show_all()
@@ -254,6 +265,7 @@ class DownloaderWindow(Gtk.ApplicationWindow):
                     threading.Thread(
                         target=Downloader.download_video,
                         args=(url, format_code, output_filename, self.log),
+                        kwargs={"proc_callback": lambda p: setattr(self, "_active_proc", p)},
                         daemon=True
                     ).start()
             else:
@@ -284,6 +296,7 @@ class DownloaderWindow(Gtk.ApplicationWindow):
                     threading.Thread(
                         target=Downloader.download_audio,
                         args=(url, output_filename, self.log),
+                        kwargs={"proc_callback": lambda p: setattr(self, "_active_proc", p)},
                         daemon=True
                     ).start()
             else:

@@ -185,11 +185,12 @@ class GstPlayer:
         self.on_eos   = on_eos
         self.on_tick  = on_tick
         self._pipe    = Gst.parse_launch("playbin")
+        self._tick_id = None
         bus = self._pipe.get_bus()
         bus.add_signal_watch()
         bus.connect("message::eos",   self._eos)
         bus.connect("message::error", self._err)
-        GLib.timeout_add(500, self._tick)
+        self._tick_id = GLib.timeout_add(500, self._tick)
 
     def play(self, path):
         self._pipe.set_state(Gst.State.NULL)
@@ -203,6 +204,9 @@ class GstPlayer:
         self._pipe.set_state(Gst.State.PLAYING)
 
     def stop(self):
+        if self._tick_id is not None:
+            GLib.source_remove(self._tick_id)
+            self._tick_id = None
         self._pipe.set_state(Gst.State.NULL)
 
     def seek(self, secs):
@@ -247,7 +251,7 @@ class ProcPlayer:
         self._pos    = 0.0
         self._dur    = 0.0
         self._playing = False
-        GLib.timeout_add(500, self._tick)
+        self._tick_id = GLib.timeout_add(500, self._tick)
 
     def _player_cmd(self, path):
         for cmd in ("mpv", "ffplay"):
@@ -279,6 +283,9 @@ class ProcPlayer:
     def resume(self): pass
 
     def stop(self):
+        if self._tick_id is not None:
+            GLib.source_remove(self._tick_id)
+            self._tick_id = None
         if self._proc and self._proc.poll() is None:
             self._proc.terminate()
         self._proc = None
@@ -474,7 +481,7 @@ class PlayerWindow(Gtk.ApplicationWindow):
         self._mq_offset = 0
         self._mq_idx    = 0
         self._load_next_glitch()
-        GLib.timeout_add(80, self._tick_marquee)
+        self._marquee_timer_id = GLib.timeout_add(80, self._tick_marquee)
 
         if USE_GST:
             self.player = GstPlayer(self._on_eos, self._on_tick)
@@ -766,6 +773,9 @@ class PlayerWindow(Gtk.ApplicationWindow):
         self.status.set_text(msg)
 
     def _on_delete(self, widget, event):
+        if self._marquee_timer_id is not None:
+            GLib.source_remove(self._marquee_timer_id)
+            self._marquee_timer_id = None
         self._viz.hide()
         self.player.stop()
         self.destroy()

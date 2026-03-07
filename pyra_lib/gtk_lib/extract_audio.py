@@ -83,8 +83,10 @@ class AudioExtractor:
     @staticmethod
     def extract(video_path, output_path):
         video = VideoFileClip(video_path)
-        audio = video.audio
-        audio.write_audiofile(output_path)
+        try:
+            video.audio.write_audiofile(output_path)
+        finally:
+            video.close()
 
 
 class FileChooser_Extract_Audio(Gtk.ApplicationWindow):
