@@ -1,0 +1,19 @@
+# ─────────────────────────────────────────────
+#  cyon_config.ini — Cyon configuration file
+#  Location: ~/cyon/cyon_config.ini
+#
+#  !! Never share or commit this file !!
+#  !! Your Discord token is a password !!
+# ─────────────────────────────────────────────
+
+[discord]
+# Your Discord bot token from discord.com/developers
+token = YOUR_BOT_TOKEN_HERE
+
+# Your personal Discord user ID (right-click your name → Copy User ID)
+# Must have Developer Mode enabled in Discord settings
+user_id = YOUR_USER_ID_HERE
+
+[piper]
+# TTS voice model filename (must be in ~/cyon/piper_models/)
+model = en_US-joe-medium.onnx

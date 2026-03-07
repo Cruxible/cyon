@@ -63,11 +63,18 @@ TOKEN, AUTHORIZED_USER_ID, PIPER_MODEL_NAME = load_config()
 # ─────────────────────────────────────────────
 
 CYON_DIR          = os.path.expanduser("~/cyon")
-PIPER_BIN         = os.path.join(CYON_DIR, "piper", "piper")
 PIPER_MODELS      = os.path.join(CYON_DIR, "piper_models")
 PIPER_MODEL_PATH  = os.path.join(PIPER_MODELS, PIPER_MODEL_NAME)
 PIPER_CONFIG_PATH = os.path.join(PIPER_MODELS, PIPER_MODEL_NAME + ".json")
 VOICE_FILE        = os.path.join(PIPER_MODELS, "voice.wav")
+
+# Find piper binary — check pyra_env first, then ~/cyon/piper/, then piper_models/, then system PATH
+_piper_locations = [
+    os.path.expanduser("~/pyra_env/bin/piper"),
+    os.path.join(CYON_DIR, "piper", "piper"),
+    os.path.join(PIPER_MODELS, "piper"),
+]
+PIPER_BIN = next((p for p in _piper_locations if os.path.isfile(p)), "piper")
 
 # ─────────────────────────────────────────────
 #  Discord client setup
