@@ -95,6 +95,9 @@ typedef struct {
     GIOChannel *stderr_chan;
     guint       stdout_watch;
     guint       stderr_watch;
+
+    /* child process — so we can kill it if the window is closed early */
+    GPid        child_pid;
 } ProgressWin;
 
 /* ------------------------------------------------------------------ */
@@ -172,6 +175,35 @@ static gboolean on_pipe_data(GIOChannel *chan, GIOCondition cond, gpointer data)
 }
 
 /* ------------------------------------------------------------------ */
+/*  Progress window cleanup — kills child, removes timers/watches      */
+/* ------------------------------------------------------------------ */
+static gboolean on_progress_win_close(GtkWidget *widget, GdkEvent *event, gpointer data) {
+    ProgressWin *pw = (ProgressWin *)data;
+
+    /* kill the download process if still running */
+    if (pw->child_pid > 0) {
+        kill(pw->child_pid, SIGTERM);
+        g_spawn_close_pid(pw->child_pid);
+        pw->child_pid = 0;
+    }
+    /* stop marquee timer */
+    if (pw->marquee_timer) {
+        g_source_remove(pw->marquee_timer);
+        pw->marquee_timer = 0;
+    }
+    /* remove pipe watches */
+    if (pw->stdout_watch) { g_source_remove(pw->stdout_watch); pw->stdout_watch = 0; }
+    if (pw->stderr_watch) { g_source_remove(pw->stderr_watch); pw->stderr_watch = 0; }
+    /* close channels */
+    if (pw->stdout_chan) { g_io_channel_unref(pw->stdout_chan); pw->stdout_chan = NULL; }
+    if (pw->stderr_chan) { g_io_channel_unref(pw->stderr_chan); pw->stderr_chan = NULL; }
+
+    g_free(pw);
+    gtk_widget_destroy(widget);
+    return TRUE; /* we handled it */
+}
+
+/* ------------------------------------------------------------------ */
 /*  Build the progress window                                           */
 /* ------------------------------------------------------------------ */
 static ProgressWin *create_progress_window(GtkWindow *parent, const char *title) {
@@ -183,6 +215,7 @@ static ProgressWin *create_progress_window(GtkWindow *parent, const char *title)
     gtk_window_set_resizable(GTK_WINDOW(pw->window), TRUE);
     if (parent)
         gtk_window_set_transient_for(GTK_WINDOW(pw->window), parent);
+    g_signal_connect(pw->window, "delete-event", G_CALLBACK(on_progress_win_close), pw);
 
     GtkWidget *outer = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_container_set_border_width(GTK_CONTAINER(outer), 10);
@@ -278,6 +311,8 @@ static void launch_with_progress(const char *command,
     }
 
     ProgressWin *pw = create_progress_window(parent, win_title);
+
+    pw->child_pid   = child_pid;  /* save so delete-event can kill it */
 
     pw->stdout_chan = g_io_channel_unix_new(stdout_fd);
     g_io_channel_set_flags(pw->stdout_chan, G_IO_FLAG_NONBLOCK, NULL);
@@ -395,7 +430,7 @@ void show_downloader_window(void) {
     gtk_window_set_title(GTK_WINDOW(window), "CYON // DOWNLOADER");
     gtk_window_set_default_size(GTK_WINDOW(window), 500, 200);
     gtk_window_set_resizable(GTK_WINDOW(window), TRUE);
-    g_signal_connect(window, "destroy", G_CALLBACK(gtk_widget_destroy), window);
+    g_signal_connect(window, "destroy", G_CALLBACK(gtk_widget_destroyed), &window);
 
     GtkWidget *outer = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_container_set_border_width(GTK_CONTAINER(outer), 12);
