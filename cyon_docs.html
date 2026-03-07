@@ -659,7 +659,7 @@ footer {
 
     <div class="info">
       <strong>// BOT TOKEN</strong>
-      Add your Discord bot token to <code>cyon_bot.py</code>. Create a bot at discord.com/developers → New Application → Bot → copy token.
+      Create a bot at discord.com/developers → New Application → Bot → copy token. Add your token and user ID to <code>~/cyon/cyon_config.ini</code>.
     </div>
   </section>
 
@@ -678,9 +678,10 @@ footer {
     <div class="process-map">
       <div class="proc-step"><span class="proc-num">①</span><div class="proc-body"><div class="proc-title">Install apt dependencies</div><div class="proc-desc">build-essential, libgtk-3-dev, pkg-config, curl, yt-dlp, ffmpeg, python3-gi, python3-gi-cairo, gir1.2-gtk-3.0</div></div></div>
       <div class="proc-step"><span class="proc-num">②</span><div class="proc-body"><div class="proc-title">Compile C binaries → bin/</div><div class="proc-desc">main_cyon (GTK app), cyon_cli (standalone shell), watcher (fs monitor), cyon_netscan (network scanner)</div></div></div>
-      <div class="proc-step"><span class="proc-num">③</span><div class="proc-body"><div class="proc-title">Create ~/pyra_env</div><div class="proc-desc">Python venv with --system-site-packages so GTK bindings work alongside pip packages</div></div></div>
-      <div class="proc-step"><span class="proc-num">④</span><div class="proc-body"><div class="proc-title">Compile pyra_toolz (Linux binary)</div><div class="proc-desc">Uses PyInstaller in a temp venv — output goes to ~/cyon/pyra_tool/pyra_toolz</div></div></div>
-      <div class="proc-step"><span class="proc-num">⑤</span><div class="proc-body"><div class="proc-title">Install .desktop launcher</div><div class="proc-desc">Creates ~/.local/share/applications/cyon.desktop so Cyon appears in your app menu</div></div></div>
+      <div class="proc-step"><span class="proc-num">③</span><div class="proc-body"><div class="proc-title">Create ~/pyra_env + install pip packages + Piper TTS</div><div class="proc-desc">Python venv with --system-site-packages. Installs pyfiglet, moviepy, rich, pillow, cryptography, pyautogui, piper-tts, onnxruntime, pathvalidate using the venv's own pip.</div></div></div>
+      <div class="proc-step"><span class="proc-num">④</span><div class="proc-body"><div class="proc-title">Download Piper voice models → ~/cyon/piper_models/</div><div class="proc-desc">Downloads en_US-joe-medium and en_US-lessac-medium (.onnx + .onnx.json) from Hugging Face.</div></div></div>
+      <div class="proc-step"><span class="proc-num">⑤</span><div class="proc-body"><div class="proc-title">Compile pyra_toolz (Linux binary)</div><div class="proc-desc">Uses PyInstaller in a temp venv — output goes to ~/cyon/pyra_tool/pyra_toolz</div></div></div>
+      <div class="proc-step"><span class="proc-num">⑥</span><div class="proc-body"><div class="proc-title">Install .desktop launcher</div><div class="proc-desc">Creates ~/.local/share/applications/cyon.desktop so Cyon appears in your app menu</div></div></div>
     </div>
 
     <h3>Manual compilation commands</h3>
@@ -889,7 +890,7 @@ You are running inside the Cyon desktop application on the user's machine.
     <table>
       <tr><th>Option</th><th>Action</th></tr>
       <tr><td>1</td><td>Install apt deps + compile all C binaries + create .desktop launcher</td></tr>
-      <tr><td>2</td><td>Create ~/pyra_env + install all pip packages including piper-tts + download voice models</td></tr>
+      <tr><td>2</td><td>Create ~/pyra_env + install all pip packages including piper-tts into it + download voice models to ~/cyon/piper_models/</td></tr>
       <tr><td>3</td><td>Compile pyra_toolz Linux binary (uses PyInstaller in temp venv)</td></tr>
       <tr><td>4</td><td>Compile pyra_termux binary (for Termux on Android)</td></tr>
       <tr><td>5</td><td>Run options 1 + 2 + 3 + 4 in sequence (full install)</td></tr>

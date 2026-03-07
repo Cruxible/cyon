@@ -2,7 +2,6 @@
 Cyon is a hybrid GTK and CLI-based desktop tool built in C. It serves as a control panel for local AI (Ollama + Llama 3), a Discord bot manager, a media downloader, and a launcher for a suite of Python utility tools. It is lightweight, hacker-themed, and extensible.
 
 > Currently under active development.
-the tar.gz is the best way ATM.
 
 ---
 
@@ -173,7 +172,7 @@ chmod +x compile_cyon
 | Option | Description |
 |--------|-------------|
 | 1 | Install apt dependencies + compile all C binaries + create .desktop launcher |
-| 2 | Setup pyra_env + install Piper TTS (creates ~/pyra_env, installs all pip deps, downloads voice models) |
+| 2 | Setup pyra_env + install Piper TTS + download voice models (creates ~/pyra_env, installs all pip deps into it, downloads voice models to ~/cyon/piper_models/) |
 | 3 | Compile pyra_toolz (Linux binary via PyInstaller) |
 | 4 | Compile pyra_termux (Termux binary) |
 | 5 | Compile all (runs 1 + 2 + 3 + 4 in sequence) |
@@ -356,10 +355,6 @@ pip install --upgrade piper-tts onnxruntime pathvalidate
 mkdir -p ~/cyon/piper_models
 cd ~/cyon/piper_models
 
-# Example: en_US-joe-medium (male)
-wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/joe/medium/en_US-joe-medium.onnx
-wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/joe/medium/en_US-joe-medium.onnx.json
-
 # Example: en_US-lessac-medium (male)
 wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx
 wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json
@@ -404,8 +399,3 @@ apt packages are **not** removed automatically as they may be used by other soft
 ```bash
 sudo apt remove build-essential libgtk-3-dev pkg-config yt-dlp ffmpeg
 ```
-
----
-
-## 👤 Author
-Ioannes Cruxibulum
