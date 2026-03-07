@@ -366,8 +366,8 @@ install_piper_binary() {
 setup_piper_models() {
     echo -e "${CYAN} Downloading Piper voice models...${NC}"
 
-    mkdir -p ~/piper_models
-    cd ~/piper_models || exit
+    mkdir -p ~/cyon/piper_models
+    cd ~/cyon/piper_models || exit
 
     # Joe voice
     wget -O en_US-joe-medium.onnx \
