@@ -8,7 +8,98 @@
 #include <dirent.h>
 #include <limits.h>
 #include <sys/ioctl.h>
+#include <pthread.h>
+#include <time.h>
 #define MAX_CMD_LEN 1024
+
+/* ── Glitch thread ─────────────────────────────────────────────────────────── */
+static volatile int glitch_running = 0;
+static pthread_t    glitch_thread;
+static char         glitch_cwd[PATH_MAX];
+static char         glitch_user[64];
+
+static const char GLITCH_CHARS[] = "!@#$%^&*<>?/|\\~`░▒▓";
+#define GLITCH_CHAR_COUNT 20
+
+static const char *GHOST_WORDS[] = {
+    "pyra", "pyra_env", "pyra_bin", "pyra_tool", "pyra_lib"
+};
+#define GHOST_WORD_COUNT 5
+
+static void *glitch_fn(void *arg) {
+    (void)arg;
+    srand((unsigned)time(NULL));
+
+    /* build a plain copy of the TOP line only for glitching */
+    char base[PATH_MAX + 16];
+    snprintf(base, sizeof(base), " ┌░%s░", glitch_cwd);
+    int base_len = (int)strlen(base);
+
+    while (glitch_running) {
+        /* sleep a random 80–300ms between glitches */
+        int delay_ms = 80 + rand() % 220;
+        struct timespec ts = { 0, delay_ms * 1000000L };
+        nanosleep(&ts, NULL);
+        if (!glitch_running) break;
+
+        /* 1 in 4 chance: flash a ghost word in red instead of char glitch */
+        if (rand() % 4 == 0) {
+            const char *word = GHOST_WORDS[rand() % GHOST_WORD_COUNT];
+            int word_len = (int)strlen(word);
+            int max_pos = base_len - word_len;
+            if (max_pos < 1) max_pos = 1;
+            int pos = rand() % max_pos;
+
+            char glitched[PATH_MAX + 16];
+            strncpy(glitched, base, sizeof(glitched) - 1);
+            /* scatter a couple char glitches around it too */
+            for (int i = 0; i < 2; i++) {
+                int cp = rand() % base_len;
+                glitched[cp] = GLITCH_CHARS[rand() % GLITCH_CHAR_COUNT];
+            }
+            /* stamp the ghost word in */
+            for (int i = 0; i < word_len && pos + i < base_len; i++)
+                glitched[pos + i] = word[i];
+
+            printf("\0337\033[1A\r \033[31m%s\033[37m\0338", glitched);
+            fflush(stdout);
+        } else {
+            /* normal char glitch */
+            char glitched[PATH_MAX + 16];
+            strncpy(glitched, base, sizeof(glitched) - 1);
+            int hits = 1 + rand() % 2;
+            for (int i = 0; i < hits; i++) {
+                int pos = rand() % base_len;
+                glitched[pos] = GLITCH_CHARS[rand() % GLITCH_CHAR_COUNT];
+            }
+            printf("\0337\033[1A\r \033[35m%s\033[37m\0338", glitched);
+            fflush(stdout);
+        }
+
+        /* hold the glitch briefly */
+        struct timespec hold = { 0, 60000000L }; /* 60ms */
+        nanosleep(&hold, NULL);
+        if (!glitch_running) break;
+
+        /* restore top line to normal */
+        printf("\0337\033[1A\r \033[96m┌░\033[37m%s\033[96m░\033[37m\0338", glitch_cwd);
+        fflush(stdout);
+    }
+    return NULL;
+}
+
+static void start_glitch(const char *cwd, const char *user) {
+    strncpy(glitch_cwd,  cwd,  sizeof(glitch_cwd)  - 1);
+    strncpy(glitch_user, user, sizeof(glitch_user) - 1);
+    glitch_running = 1;
+    pthread_create(&glitch_thread, NULL, glitch_fn, NULL);
+}
+
+static void stop_glitch(void) {
+    glitch_running = 0;
+    pthread_join(glitch_thread, NULL);
+}
+
 void print_prompt() {
     struct passwd *pw = getpwuid(getuid());
     const char *username = pw ? pw->pw_name : "user";
@@ -19,6 +110,7 @@ void print_prompt() {
     }
     printf(" \033[96m┌░\033[37m%s\033[96m░\n └░\033[37m%s\033[96m░\033[37m ", cwd, username);
     fflush(stdout);
+    start_glitch(cwd, username);
 }
 void handle_cd(char *path) {
     if (path == NULL || strcmp(path, "~") == 0) {
@@ -141,9 +233,11 @@ int main() {
     while (1) {
         print_prompt();
         if (fgets(command, sizeof(command), stdin) == NULL) {
+            stop_glitch();
             printf("\n");
             break;
         }
+        stop_glitch();
         command[strcspn(command, "\n")] = 0;
         if (strcmp(command, "exit") == 0)
             break;
@@ -162,9 +256,11 @@ int main() {
             while (1) {
                 print_prompt();
                 if (fgets(command, sizeof(command), stdin) == NULL) {
+                    stop_glitch();
                     printf("\n");
                     break;
                 }
+                stop_glitch();
                 command[strcspn(command, "\n")] = 0;
                 if (strcmp(command, "exit") == 0) {
                     printf(" Exiting Tools Menu.\n");
@@ -203,9 +299,11 @@ int main() {
             while (1) {
                 print_prompt();
                 if (fgets(command, sizeof(command), stdin) == NULL) {
+                    stop_glitch();
                     printf("\n");
                     break;
                 }
+                stop_glitch();
                 command[strcspn(command, "\n")] = 0;
                 if (strcmp(command, "exit") == 0) {
                     printf(" Exiting Security Menu.\n");
