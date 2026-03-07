@@ -2,6 +2,7 @@
 Cyon is a hybrid GTK and CLI-based desktop tool built in C. It serves as a control panel for local AI (Ollama + Llama 3), a Discord bot manager, a media downloader, and a launcher for a suite of Python utility tools. It is lightweight, hacker-themed, and extensible.
 
 > Currently under active development.
+the tar.gz is the best way ATM.
 
 ---
 
