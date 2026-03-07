@@ -254,13 +254,13 @@ function start_shell_or_venv() {
           "pi ssh")
             glitch_print "  ESTABLISHING SECURE CHANNEL TO PI..." "${CYAN}"
             (sleep 0.5) & spin $!; wait $!
-            ssh jonathan@192.168.1.212
+            ssh user@192.168.1.000
             break
             ;;
           "droid ssh")
             glitch_print "  JACKING INTO DROID NODE..." "${CYAN}"
             (sleep 0.5) & spin $!; wait $!
-            ssh u0_a275@192.168.1.200 -p 8022
+            ssh user@192.168.1.000 -p 8022
             break
             ;;
           "exit")
