@@ -379,6 +379,20 @@ static void stop_all(GtkWidget *b, gpointer d) {
     ui_log("!!! EMERGENCY SHUTDOWN INITIATED !!!");
     stop_ollama(NULL,NULL); stop_bot(NULL,NULL); stop_local(NULL,NULL); 
 }
+
+/* ── Clean shutdown: kill ALL child processes then quit ─────────────────── */
+static void shutdown_all(void) {
+    if (ollama_pid > 0) { kill(ollama_pid, SIGTERM); ollama_pid = 0; }
+    if (bot_pid    > 0) { kill(bot_pid,    SIGTERM); bot_pid    = 0; }
+    if (local_pid  > 0) { kill(local_pid,  SIGTERM); local_pid  = 0; }
+    if (shell_pid  > 0) { kill(shell_pid,  SIGTERM); shell_pid  = 0; }
+    gtk_main_quit();
+}
+
+static gboolean on_delete_event(GtkWidget *w, GdkEvent *e, gpointer d) {
+    shutdown_all();
+    return TRUE; /* we handled it — prevent double-destroy */
+}
 /* ── Main ───────────────────────────────────────────────────────────────── */
 int main(int argc, char *argv[]) {
     gtk_init(&argc, &argv);
@@ -395,7 +409,7 @@ int main(int argc, char *argv[]) {
 
     GtkWidget *win = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_default_size(GTK_WINDOW(win), 580, 650);
-    g_signal_connect(win, "destroy", G_CALLBACK(gtk_main_quit), NULL);
+    g_signal_connect(win, "delete-event", G_CALLBACK(on_delete_event), NULL);
 
     GtkWidget *outer = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
     gtk_container_set_border_width(GTK_CONTAINER(outer), 15);
