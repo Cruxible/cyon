@@ -427,7 +427,6 @@ footer {
   <a href="#how-it-works">How It Works</a>
 
   <span class="nav-section">INSTALL</span>
-  <a href="#appimage">AppImage (Quick)</a>
   <a href="#config">cyon_config.ini</a>
   <a href="#dependencies">Dependencies</a>
   <a href="#building">Building</a>
@@ -544,29 +543,6 @@ footer {
   <div class="marquee-strip">
     <span class="marquee-inner">▸ CYON ONLINE. REALITY OPTIONAL. &nbsp;&nbsp;&nbsp; ▸ OLLAMA STANDING BY. &nbsp;&nbsp;&nbsp; ▸ ROUTING THROUGH THE SHADOW REALM... &nbsp;&nbsp;&nbsp; ▸ ALL SYSTEMS... PROBABLY FINE. &nbsp;&nbsp;&nbsp; ▸ THE HORRORS PERSIST, BUT SO DO I. &nbsp;&nbsp;&nbsp; ▸ BYTES GO BRRR... &nbsp;&nbsp;&nbsp; ▸ LOCAL AI. NO CLOUD. NO SNITCHING. &nbsp;&nbsp;&nbsp;</span>
   </div>
-
-  <!-- APPIMAGE -->
-  <section id="appimage">
-    <h2>AppImage — Quick Install</h2>
-    <p>The easiest way to run Cyon — no compiling required. Download the latest AppImage from the GitHub Releases page and run it directly.</p>
-
-    <div class="code-block"><button class="copy-btn" onclick="cp(this)">COPY</button><span class="c"># 1. Download from GitHub Releases, then:</span>
-<span class="g">chmod +x</span> <span class="am">cyon-vX.X.X-YYYY-MM-DD-x86_64.AppImage</span>
-<span class="g">./cyon-vX.X.X-YYYY-MM-DD-x86_64.AppImage</span></div>
-
-    <p>On first launch the AppImage automatically handles first-time setup:</p>
-    <div class="process-map">
-      <div class="proc-step"><span class="proc-num">01</span><div class="proc-body"><div class="proc-title">Creates ~/cyon/</div><div class="proc-desc">Sets up the Cyon home directory and drops a blank <code>cyon_config.ini</code> with placeholder values.</div></div></div>
-      <div class="proc-step"><span class="proc-num">02</span><div class="proc-body"><div class="proc-title">Sets up ~/pyra_env</div><div class="proc-desc">Creates the Python virtual environment and installs all pip dependencies automatically.</div></div></div>
-      <div class="proc-step"><span class="proc-num">03</span><div class="proc-body"><div class="proc-title">Adds Cyon to PATH</div><div class="proc-desc">Adds <code>~/cyon/bin</code> and <code>~/cyon/pyra_tool</code> to PATH in <code>~/.bashrc</code>.</div></div></div>
-      <div class="proc-step"><span class="proc-num">04</span><div class="proc-body"><div class="proc-title">Creates .desktop launcher</div><div class="proc-desc">Cyon appears in your application menu automatically.</div></div></div>
-    </div>
-
-    <div class="warn">
-      <strong>// OLLAMA NOT BUNDLED</strong>
-      Ollama must be installed separately — it is too large to bundle in the AppImage. Install it at <strong>ollama.com</strong> before starting the LOCAL CYON or DISCORD BOT services.
-    </div>
-  </section>
 
   <!-- CONFIG -->
   <section id="config">

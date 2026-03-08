@@ -23,27 +23,6 @@ Cyon is a hybrid GTK and CLI-based desktop tool built in C. It serves as a contr
 
 ---
 
-## 🚀 Quick Install (AppImage)
-
-The easiest way to run Cyon — no compiling required:
-
-1. Download the latest `cyon-vX.X.X-YYYY-MM-DD-x86_64.AppImage` from the [Releases](../../releases) page
-2. Make it executable and run it:
-```bash
-chmod +x cyon-vX.X.X-YYYY-MM-DD-x86_64.AppImage
-./cyon-vX.X.X-YYYY-MM-DD-x86_64.AppImage
-```
-
-On first launch the AppImage will automatically:
-- Create `~/cyon/` and set up `~/pyra_env`
-- Install all Python dependencies
-- Add Cyon to your PATH in `~/.bashrc`
-- Create a `.desktop` launcher so Cyon appears in your app menu
-
-> ⚠️ **Ollama must be installed separately** — [ollama.com](https://ollama.com). It's too large to bundle.
-
----
-
 ## ⚙️ Configuration (cyon_config.ini)
 
 Cyon stores user configuration in `~/cyon/cyon_config.ini`. This file is created automatically on first run with placeholder values. Open it in any text editor and fill in your details:
