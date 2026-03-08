@@ -14,6 +14,7 @@ static void ui_log(const char *fmt, ...);
 #define CYON_PATH_MAX (PATH_MAX * 2)
 static char BOT_SCRIPT[CYON_PATH_MAX];
 static char LOCAL_BOT_SCRIPT[CYON_PATH_MAX];
+static char TOOLS_SCRIPT[CYON_PATH_MAX];
 static char SHELL_SCRIPT[CYON_PATH_MAX];
 static char VENV_PYTHON[CYON_PATH_MAX];
 
@@ -25,6 +26,7 @@ static void resolve_paths(void) {
     snprintf(BOT_SCRIPT,       sizeof(BOT_SCRIPT),       "%s/cyon_bot.py",    base);
     snprintf(LOCAL_BOT_SCRIPT, sizeof(LOCAL_BOT_SCRIPT), "%s/cyon_local.py",  base);
     snprintf(SHELL_SCRIPT,     sizeof(SHELL_SCRIPT),     "%s/cyon_shell.py",  base);
+    snprintf(TOOLS_SCRIPT,     sizeof(TOOLS_SCRIPT),     "%s/cyon_tools.py",  base);
 
     /* pyra_env always lives in ~/pyra_env regardless of install method */
     if (home)
@@ -33,10 +35,10 @@ static void resolve_paths(void) {
         snprintf(VENV_PYTHON, sizeof(VENV_PYTHON), "/usr/bin/python3");
 }
 /* ── Global process handles ─────────────────────────────────────────────── */
-static GPid ollama_pid = 0, bot_pid = 0, local_pid = 0, shell_pid = 0;
-static int  ollama_fd = -1, bot_fd = -1, local_stdout_fd = -1, local_stdin_fd = -1, shell_stdin_fd = -1, shell_stdout_fd = -1;
+static GPid ollama_pid = 0, bot_pid = 0, local_pid = 0, shell_pid = 0, tools_pid = 0;
+static int  ollama_fd = -1, bot_fd = -1, local_stdout_fd = -1, local_stdin_fd = -1, shell_stdin_fd = -1, shell_stdout_fd = -1, tools_stdin_fd = -1, tools_stdout_fd = -1;
 /* ── Widget refs ─────────────────────────────────────────────────────────── */
-static GtkWidget     *ollama_status_lbl, *bot_status_lbl, *local_status_lbl;
+static GtkWidget     *ollama_status_lbl, *bot_status_lbl, *local_status_lbl, *tools_status_lbl;
 static GtkTextBuffer *log_buffer;
 static GtkWidget     *log_view;
 static GtkTextTag    *shell_tag = NULL;
@@ -316,9 +318,13 @@ static void on_input_activate(GtkEntry *entry, gpointer data) {
 
     gtk_entry_set_text(entry, "");
 
-    /* Forward non-commands to bot if running */
+    /* Forward non-commands to local bot if running */
     if (text[0] != '/' && local_pid != 0)
         write(local_stdin_fd, buffer, strlen(buffer));
+
+    /* Forward non-commands to tools engine if running */
+    if (text[0] != '/' && tools_pid != 0)
+        write(tools_stdin_fd, buffer, strlen(buffer));
 }
 static void update_status_label(GtkWidget *label, gboolean online) {
     GtkStyleContext *ctx = gtk_widget_get_style_context(label);
@@ -376,9 +382,23 @@ static void start_local(GtkWidget *b, gpointer d) {
         ui_log("▸ LOCAL: Cyon core linked.");
     }
 }
+static void stop_tools(GtkWidget *b, gpointer d) {
+    if (tools_pid > 0) { kill(tools_pid, SIGTERM); tools_pid = 0; update_status_label(tools_status_lbl, FALSE); ui_log("\u25a0 TOOLS: Engine offline."); }
+}
+static void start_tools(GtkWidget *b, gpointer d) {
+    if (tools_pid > 0) return;
+    gchar *argv[] = { VENV_PYTHON, TOOLS_SCRIPT, NULL };
+    if (g_spawn_async_with_pipes(NULL, argv, NULL, G_SPAWN_DO_NOT_REAP_CHILD, NULL, NULL, &tools_pid, &tools_stdin_fd, &tools_stdout_fd, NULL, NULL)) {
+        update_status_label(tools_status_lbl, TRUE);
+        ReaderArgs *args = g_new(ReaderArgs, 1);
+        args->fd = tools_stdout_fd; args->pid_ptr = &tools_pid; g_strlcpy(args->prefix, "TOOLS", 16);
+        g_thread_new("tools-reader", reader_thread, args);
+        ui_log("\u25b8 TOOLS: Cyon Tools engine online.");
+    }
+}
 static void stop_all(GtkWidget *b, gpointer d) { 
     ui_log("!!! EMERGENCY SHUTDOWN INITIATED !!!");
-    stop_ollama(NULL,NULL); stop_bot(NULL,NULL); stop_local(NULL,NULL); 
+    stop_ollama(NULL,NULL); stop_bot(NULL,NULL); stop_local(NULL,NULL); stop_tools(NULL,NULL);
 }
 
 /* ── Clean shutdown: kill ALL child processes then quit ─────────────────── */
@@ -386,6 +406,7 @@ static void shutdown_all(void) {
     if (ollama_pid > 0) { kill(ollama_pid, SIGTERM); ollama_pid = 0; }
     if (bot_pid    > 0) { kill(bot_pid,    SIGTERM); bot_pid    = 0; }
     if (local_pid  > 0) { kill(local_pid,  SIGTERM); local_pid  = 0; }
+    if (tools_pid  > 0) { kill(tools_pid,  SIGTERM); tools_pid  = 0; }
     if (shell_pid  > 0) { kill(shell_pid,  SIGTERM); shell_pid  = 0; }
     gtk_main_quit();
 }
@@ -552,24 +573,47 @@ int main(int argc, char *argv[]) {
 
     /* OLLAMA */
     GtkWidget *ol_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    ollama_status_lbl = gtk_label_new("● OFFLINE");
+    gtk_style_context_add_class(gtk_widget_get_style_context(ollama_status_lbl), "status-label");
+    gtk_style_context_add_class(gtk_widget_get_style_context(ollama_status_lbl), "status-off");
     gtk_box_pack_start(GTK_BOX(ol_box), gtk_label_new("OLLAMA SERVER"), FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(ol_box), ollama_status_lbl, FALSE, FALSE, 0);
     gtk_box_pack_end(GTK_BOX(ol_box), make_button("STOP", "btn-stop", G_CALLBACK(stop_ollama)), FALSE, FALSE, 0);
     gtk_box_pack_end(GTK_BOX(ol_box), make_button("START", "btn-start", G_CALLBACK(start_ollama)), FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(outer), ol_box, FALSE, FALSE, 0);
 
     /* DISCORD */
     GtkWidget *ds_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    bot_status_lbl = gtk_label_new("● OFFLINE");
+    gtk_style_context_add_class(gtk_widget_get_style_context(bot_status_lbl), "status-label");
+    gtk_style_context_add_class(gtk_widget_get_style_context(bot_status_lbl), "status-off");
     gtk_box_pack_start(GTK_BOX(ds_box), gtk_label_new("DISCORD BOT"), FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(ds_box), bot_status_lbl, FALSE, FALSE, 0);
     gtk_box_pack_end(GTK_BOX(ds_box), make_button("STOP", "btn-stop", G_CALLBACK(stop_bot)), FALSE, FALSE, 0);
     gtk_box_pack_end(GTK_BOX(ds_box), make_button("START", "btn-start", G_CALLBACK(start_bot)), FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(outer), ds_box, FALSE, FALSE, 0);
 
     /* LOCAL */
     GtkWidget *lc_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    local_status_lbl = gtk_label_new("● OFFLINE");
+    gtk_style_context_add_class(gtk_widget_get_style_context(local_status_lbl), "status-label");
+    gtk_style_context_add_class(gtk_widget_get_style_context(local_status_lbl), "status-off");
     gtk_box_pack_start(GTK_BOX(lc_box), gtk_label_new("LOCAL CYON"), FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(lc_box), local_status_lbl, FALSE, FALSE, 0);
     gtk_box_pack_end(GTK_BOX(lc_box), make_button("STOP", "btn-stop", G_CALLBACK(stop_local)), FALSE, FALSE, 0);
     gtk_box_pack_end(GTK_BOX(lc_box), make_button("START", "btn-start", G_CALLBACK(start_local)), FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(outer), lc_box, FALSE, FALSE, 0);
+
+    /* TOOLS */
+    GtkWidget *tl_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    tools_status_lbl = gtk_label_new("● OFFLINE");
+    gtk_style_context_add_class(gtk_widget_get_style_context(tools_status_lbl), "status-label");
+    gtk_style_context_add_class(gtk_widget_get_style_context(tools_status_lbl), "status-off");
+    gtk_box_pack_start(GTK_BOX(tl_box), gtk_label_new("CYON TOOLS"), FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(tl_box), tools_status_lbl, FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(tl_box), make_button("STOP", "btn-stop", G_CALLBACK(stop_tools)), FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(tl_box), make_button("START", "btn-start", G_CALLBACK(start_tools)), FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(outer), tl_box, FALSE, FALSE, 0);
 
     GtkWidget *stop_all_btn = make_button("■ SHUTDOWN ALL", "btn-stop", G_CALLBACK(stop_all));
     gtk_box_pack_start(GTK_BOX(outer), stop_all_btn, FALSE, FALSE, 5);
