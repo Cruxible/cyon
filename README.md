@@ -7,8 +7,9 @@ Cyon is a hybrid GTK and CLI-based desktop tool built in C. It serves as a contr
 
 ## ✨ Features
 
-- ✅ GTK 3 control panel — manage Ollama, local AI, and Discord bot from one window
+- ✅ GTK 3 control panel — manage Ollama, local AI, Discord bot, and tool engine from one window
 - ✅ Local AI chatbot powered by Ollama + Llama 3 (no cloud, no API key)
+- ✅ Cyon Tools — separate llama.cpp-powered tool engine with real shell, ping, whois, file, and app launch tools
 - ✅ Discord bot integration — relay messages through local Llama 3
 - ✅ MP3/MP4 and file downloading using yt-dlp and curl
 - ✅ Standalone CLI with styled shell prompt
@@ -98,7 +99,7 @@ Create a bot at [discord.com/developers](https://discord.com/developers), then a
 
 ## 🤖 Ollama + Llama 3
 
-Cyon manages the Ollama server directly from the GTK control panel. Start/stop buttons for OLLAMA SERVER, LOCAL CYON, and DISCORD BOT are on the main window.
+Cyon manages the Ollama server directly from the GTK control panel. Start/stop buttons for OLLAMA SERVER, LOCAL CYON, DISCORD BOT, and CYON TOOLS are on the main window. All four rows include a `● ONLINE / ● OFFLINE` status indicator.
 
 ### Setup
 ```bash
@@ -135,6 +136,19 @@ ollama create cyon -f ~/cyon/Modelfile
 ```
 
 Then update `cyon_local.py` and `cyon_bot.py` to use `"cyon"` as the model name.
+
+> ✅ **Recommended:** Use the `cyon` model — it has Cyon's personality baked in. `cyon_local.py` is configured to use `"cyon"` by default.
+
+---
+
+## 📄 Key Python Files
+
+| File | Purpose |
+|------|---------|
+| `cyon_local.py` | Local AI chatbot — connects to Ollama, handles chat and slash commands |
+| `cyon_tools.py` | Tool engine — llama.cpp powered, executes real shell commands, ping, whois, file checks, app launches |
+| `cyon_bot.py` | Discord bot — relays messages through Ollama |
+| `cyon_shell.py` | Shell backbone — always running, handles slash commands even when AI is offline |
 
 ---
 
@@ -365,15 +379,11 @@ model = en_US-joe-medium.onnx
 
 ---
 
-## 🦙 llama.cpp (Alternative Local AI — No Ollama Required)
+## 🦙 llama.cpp — cyon_tools.py
 
-Cyon supports running local AI directly via `llama-cpp-python` as an alternative to Ollama. This is useful if you want a lighter setup, don't want the Ollama server running, or prefer to manage your own GGUF models.
+Cyon Tools (`cyon_tools.py`) uses `llama-cpp-python` to run a local GGUF model directly — no Ollama server required. It is a completely separate process from `cyon_local.py` and is managed by its own **CYON TOOLS** row in the GTK control panel.
 
-### Why llama.cpp instead of Ollama?
-- No background server process needed
-- Direct model loading inside `cyon_local.py`
-- Works entirely offline once the model is downloaded
-- Slightly lower memory overhead
+`cyon_local.py` uses **Ollama only** for chat. `cyon_tools.py` uses **llama.cpp** for tool execution. They run independently and can both be active at the same time.
 
 ### Step 1 — Install llama-cpp-python
 
@@ -409,9 +419,9 @@ print('Download complete!')
 | `Meta-Llama-3-8B-Instruct-Q4_K_M.gguf` | ~4.7GB | ~6GB | ✅ Recommended |
 | `Meta-Llama-3-8B-Instruct-Q3_K_S.gguf` | ~3.4GB | ~4GB | Lower quality |
 
-### Step 3 — Update cyon_local.py
+### Step 3 — Update cyon_tools.py
 
-Set the model path at the top of `cyon_local.py`:
+Set the model path at the top of `cyon_tools.py`:
 ```python
 LLAMA_MODEL_PATH = "/home/cruxible/cyon/llama3_models/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf"
 ```
@@ -428,9 +438,9 @@ If the model fails to load, Cyon will print a clear error and **continue running
 
 ---
 
-## 🔧 cyon_local.py — Tool System
+## 🔧 cyon_tools.py — Tool Engine
 
-`cyon_local.py` gives Cyon the ability to run real commands and tools on your system in response to natural language requests.
+`cyon_tools.py` is a standalone tool engine that gives Cyon the ability to run real commands on your system in response to natural language. It runs as a separate process from `cyon_local.py` and is managed by the **CYON TOOLS** START/STOP row in the GTK window.
 
 ### How It Works
 

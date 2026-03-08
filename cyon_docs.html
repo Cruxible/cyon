@@ -443,7 +443,7 @@ footer {
   <span class="nav-section">MANAGE</span>
   <a href="#compile-menu">compile_cyon Menu</a>
   <a href="#llamacpp">llama.cpp Setup</a>
-      <a href="#tools">Tool System</a>
+      <a href="#tools">cyon_tools.py</a>
       <a href="#uninstall">Uninstall</a>
 </nav>
 
@@ -522,7 +522,7 @@ footer {
         <span class="proc-num">04</span>
         <div class="proc-body">
           <div class="proc-title">Local Chatbot (manual start)</div>
-          <div class="proc-desc"><code>cyon_local.py</code> connects to Ollama and uses the Llama 3 model. Non-command text typed in the input field is forwarded to its stdin. Replies appear in the GTK log view tagged in cyan.</div>
+          <div class="proc-desc"><code>cyon_local.py</code> connects to Ollama using the <code>cyon</code> custom model. Pure chat — no tool execution. Has its own TTS voice (<code>voice.wav</code>). Non-command text is forwarded to its stdin. This is the whimsical, lore-heavy personality.</div>
         </div>
       </div>
       <div class="proc-step">
@@ -530,6 +530,10 @@ footer {
         <div class="proc-body">
           <div class="proc-title">Discord Bot (manual start)</div>
           <div class="proc-desc"><code>cyon_bot.py</code> connects to Discord via your bot token and relays messages through Ollama. Start after Ollama is running. Logs appear in the GTK log view.</div>
+        </div>
+        <div class="proc-entry">
+          <div class="proc-title">CYON TOOLS (manual start)</div>
+          <div class="proc-desc"><code>cyon_tools.py</code> loads a local GGUF model via <code>llama-cpp-python</code> and executes real system commands in response to natural language. Has its own TTS voice (<code>voice_tools.wav</code>). This is the serious, no-nonsense personality. Can run alongside LOCAL CYON independently.
         </div>
       </div>
       <div class="proc-step">
@@ -805,7 +809,8 @@ You are running inside the Cyon desktop application on the user's machine.
       <tr><td>/pyra</td><td>Launches pyra_toolz from the shell</td></tr>
       <tr><td>/cyon_cli</td><td>Drops into the CLI interface</td></tr>
       <tr><td>/term</td><td>Spawns a new terminal window</td></tr>
-      <tr><td>(any non-/ text)</td><td>Forwarded to LOCAL CYON bot if it is running</td></tr>
+      <tr><td>/status</td><td>Show model load status and history length (LOCAL and TOOLS)</td></tr>
+      <tr><td>(any non-/ text)</td><td>Forwarded to LOCAL CYON and CYON TOOLS if running</td></tr>
     </table>
   </section>
 
@@ -884,7 +889,7 @@ You are running inside the Cyon desktop application on the user's machine.
   <!-- LLAMA.CPP -->
   <section id="llamacpp">
     <h2>llama.cpp — Alternative Local AI</h2>
-    <p>Cyon supports running local AI directly via <code>llama-cpp-python</code> as an alternative to Ollama. No background server required — the model loads directly inside <code>cyon_local.py</code>.</p>
+    <p><code>cyon_tools.py</code> uses <code>llama-cpp-python</code> to run a GGUF model directly — no Ollama server required. It is completely separate from <code>cyon_local.py</code> and managed by the <strong>CYON TOOLS</strong> row in the GTK window. Both can run at the same time.</p>
 
     <h3>Step 1 — Install llama-cpp-python</h3>
     <div class="code-block"><button class="copy-btn" onclick="cp(this)">COPY</button>/home/cruxible/pyra_env/bin/pip install llama-cpp-python</div>
@@ -912,24 +917,24 @@ print('Download complete!')
     </table>
 
     <h3>Step 3 — Update cyon_local.py</h3>
-    <p>Set the model path at the top of <code>cyon_local.py</code>:</p>
+    <p>Set the model path at the top of <code>cyon_tools.py</code>:</p>
     <div class="code-block"><button class="copy-btn" onclick="cp(this)">COPY</button>LLAMA_MODEL_PATH = "/home/cruxible/cyon/llama3_models/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf"</div>
 
     <h3>Step 4 — Verify</h3>
     <p>Start Cyon. You should see:</p>
-    <div class="code-block"><span class="g">[LOCAL] Loading model, please wait...</span>
-<span class="g">[LOCAL] Model loaded OK.</span></div>
+    <div class="code-block"><span class="g">[TOOLS] Loading model, please wait...</span>
+<span class="g">[TOOLS] Model loaded OK.</span></div>
 
     <div class="info">
       <strong>// GRACEFUL DEGRADATION</strong>
-      If the model fails to load for any reason, Cyon prints a clear error and <strong>keeps running</strong>. All slash commands (/pyra, /term, /clear, etc.) remain fully functional without the AI.
+      If the model fails to load, CYON TOOLS prints a clear error and <strong>keeps running</strong>. All slash commands remain functional without the AI.
     </div>
   </section>
 
   <!-- TOOL SYSTEM -->
   <section id="tools">
-    <h2>cyon_local.py — Tool System</h2>
-    <p><code>cyon_local.py</code> gives Cyon the ability to run real commands on your system in response to natural language. When the model needs a tool, it outputs a <code>TOOL:</code> line which is intercepted and executed automatically.</p>
+    <h2>cyon_tools.py — Tool Engine</h2>
+    <p><code>cyon_tools.py</code> is a standalone tool engine powered by llama.cpp. When the model needs a tool, it outputs a <code>TOOL:</code> line which is intercepted and executed automatically. It runs independently from <code>cyon_local.py</code> — start it from the <strong>CYON TOOLS</strong> row in the GTK window.</p>
 
     <h3>Tool Call Format</h3>
     <div class="code-block">TOOL: tool_name argument</div>
