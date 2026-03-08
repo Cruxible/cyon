@@ -362,6 +362,145 @@ model = en_US-joe-medium.onnx
 
 ---
 
+
+---
+
+## 🦙 llama.cpp (Alternative Local AI — No Ollama Required)
+
+Cyon supports running local AI directly via `llama-cpp-python` as an alternative to Ollama. This is useful if you want a lighter setup, don't want the Ollama server running, or prefer to manage your own GGUF models.
+
+### Why llama.cpp instead of Ollama?
+- No background server process needed
+- Direct model loading inside `cyon_local.py`
+- Works entirely offline once the model is downloaded
+- Slightly lower memory overhead
+
+### Step 1 — Install llama-cpp-python
+
+Install into your existing `pyra_env`:
+```bash
+/home/cruxible/pyra_env/bin/pip install llama-cpp-python
+```
+
+> ⚠️ If you compiled llama.cpp manually with GPU support, see the [llama-cpp-python docs](https://github.com/abetlen/llama-cpp-python) for the correct install flags.
+
+### Step 2 — Download a GGUF Model
+
+Modern llama.cpp requires **GGUF format** models. The old `.bin` format is not supported.
+
+```bash
+# Install huggingface-hub into pyra_env
+/home/cruxible/pyra_env/bin/pip install huggingface-hub
+
+# Download Llama 3 8B (recommended — ~4.7GB)
+/home/cruxible/pyra_env/bin/python -c "
+from huggingface_hub import hf_hub_download
+hf_hub_download(
+    repo_id='bartowski/Meta-Llama-3-8B-Instruct-GGUF',
+    filename='Meta-Llama-3-8B-Instruct-Q4_K_M.gguf',
+    local_dir='/home/cruxible/cyon/llama3_models/'
+)
+print('Download complete!')
+"
+```
+
+| Model | Size | RAM Needed | Quality |
+|-------|------|-----------|---------|
+| `Meta-Llama-3-8B-Instruct-Q4_K_M.gguf` | ~4.7GB | ~6GB | ✅ Recommended |
+| `Meta-Llama-3-8B-Instruct-Q3_K_S.gguf` | ~3.4GB | ~4GB | Lower quality |
+
+### Step 3 — Update cyon_local.py
+
+Set the model path at the top of `cyon_local.py`:
+```python
+LLAMA_MODEL_PATH = "/home/cruxible/cyon/llama3_models/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf"
+```
+
+### Step 4 — Verify
+
+Start Cyon and check the output:
+```
+[LOCAL] Loading model, please wait...
+[LOCAL] Model loaded OK.
+```
+
+If the model fails to load, Cyon will print a clear error and **continue running** — all slash commands still work without the AI.
+
+---
+
+## 🔧 cyon_local.py — Tool System
+
+`cyon_local.py` gives Cyon the ability to run real commands and tools on your system in response to natural language requests.
+
+### How It Works
+
+When you type a message, Cyon passes it to the local LLM. If the model determines a tool is needed, it responds with a `TOOL:` line in this exact format:
+
+```
+TOOL: tool_name argument
+```
+
+`cyon_local.py` intercepts that line, runs the tool, and includes the result in the response.
+
+### Built-in Tools
+
+| Tool | Usage | Description |
+|------|-------|-------------|
+| `shell` | `TOOL: shell <command>` | Run any bash command and return output |
+| `file_check` | `TOOL: file_check <path>` | Check if a file exists and get its size |
+| `ping` | `TOOL: ping <host>` | Ping a host or IP address |
+| `whois` | `TOOL: whois <domain>` | Look up domain registration info |
+| `launch` | `TOOL: launch <app>` | Launch an app in a new terminal window |
+
+### Launch Tool — Supported Apps
+
+| App Name | Launches |
+|----------|----------|
+| `pyra_toolz` or `pyra` | `~/cyon/pyra_tool/pyra_toolz` |
+| `cyon_cli` | `~/cyon/bin/cyon_cli` |
+
+### Example Prompts
+
+```
+what processes are running on my system
+how much disk space do i have left
+check if the file ~/cyon/cyon_local.py exists
+ping google.com
+run pyra_toolz
+```
+
+### Adding Your Own Tools
+
+Open `cyon_local.py` and add a function to the `TOOLS` dict:
+
+```python
+def tool_mycommand(arg):
+    import subprocess
+    result = subprocess.check_output(["my_command", arg], timeout=10)
+    return result.decode("utf-8")[:500]
+
+TOOLS = {
+    ...
+    "mycommand": tool_mycommand,
+}
+```
+
+Then tell Cyon about it by adding an example to the `SYSTEM_PROMPT`.
+
+### Slash Commands (always available even without AI)
+
+These work whether or not the LLM is loaded:
+
+| Command | Description |
+|---------|-------------|
+| `/shutdown` | Shut down the PC |
+| `/bye` | Exit Cyon gracefully |
+| `/clear` | Clear conversation history |
+| `/pyra` | Launch pyra_toolz in a new terminal |
+| `/cyon_cli` | Launch Cyon CLI in a new terminal |
+| `/term` | Open a new terminal window |
+| `/status` | Show model load status and history length |
+
 ## 🗑️ Uninstalling
 
 Select option **9** from the `compile_cyon` menu. You will be asked to confirm before anything is deleted.

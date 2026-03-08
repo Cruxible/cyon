@@ -442,7 +442,9 @@ footer {
 
   <span class="nav-section">MANAGE</span>
   <a href="#compile-menu">compile_cyon Menu</a>
-  <a href="#uninstall">Uninstall</a>
+  <a href="#llamacpp">llama.cpp Setup</a>
+      <a href="#tools">Tool System</a>
+      <a href="#uninstall">Uninstall</a>
 </nav>
 
 <!-- ── MAIN ── -->
@@ -875,6 +877,111 @@ You are running inside the Cyon desktop application on the user's machine.
       <tr><td>8</td><td>Remove Pyra PATH block from ~/.bashrc</td></tr>
       <tr><td>9</td><td>Uninstall Cyon (see below)</td></tr>
       <tr><td>0</td><td>Exit</td></tr>
+    </table>
+  </section>
+
+
+  <!-- LLAMA.CPP -->
+  <section id="llamacpp">
+    <h2>llama.cpp — Alternative Local AI</h2>
+    <p>Cyon supports running local AI directly via <code>llama-cpp-python</code> as an alternative to Ollama. No background server required — the model loads directly inside <code>cyon_local.py</code>.</p>
+
+    <h3>Step 1 — Install llama-cpp-python</h3>
+    <div class="code-block"><button class="copy-btn" onclick="cp(this)">COPY</button>/home/cruxible/pyra_env/bin/pip install llama-cpp-python</div>
+
+    <h3>Step 2 — Download a GGUF Model</h3>
+    <p>Modern llama.cpp requires <strong>GGUF format</strong> models. The old <code>.bin</code> format is not supported.</p>
+    <div class="code-block"><button class="copy-btn" onclick="cp(this)">COPY</button><span class="c"># Install huggingface-hub into pyra_env</span>
+/home/cruxible/pyra_env/bin/pip install huggingface-hub
+
+<span class="c"># Download Llama 3 8B Instruct (~4.7GB, recommended)</span>
+/home/cruxible/pyra_env/bin/python -c "
+from huggingface_hub import hf_hub_download
+hf_hub_download(
+    repo_id='bartowski/Meta-Llama-3-8B-Instruct-GGUF',
+    filename='Meta-Llama-3-8B-Instruct-Q4_K_M.gguf',
+    local_dir='/home/cruxible/cyon/llama3_models/'
+)
+print('Download complete!')
+"</div>
+
+    <table>
+      <tr><th>Model File</th><th>Size</th><th>RAM Needed</th><th>Quality</th></tr>
+      <tr><td>Meta-Llama-3-8B-Instruct-Q4_K_M.gguf</td><td>~4.7GB</td><td>~6GB</td><td>✅ Recommended</td></tr>
+      <tr><td>Meta-Llama-3-8B-Instruct-Q3_K_S.gguf</td><td>~3.4GB</td><td>~4GB</td><td>Lower quality</td></tr>
+    </table>
+
+    <h3>Step 3 — Update cyon_local.py</h3>
+    <p>Set the model path at the top of <code>cyon_local.py</code>:</p>
+    <div class="code-block"><button class="copy-btn" onclick="cp(this)">COPY</button>LLAMA_MODEL_PATH = "/home/cruxible/cyon/llama3_models/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf"</div>
+
+    <h3>Step 4 — Verify</h3>
+    <p>Start Cyon. You should see:</p>
+    <div class="code-block"><span class="g">[LOCAL] Loading model, please wait...</span>
+<span class="g">[LOCAL] Model loaded OK.</span></div>
+
+    <div class="info">
+      <strong>// GRACEFUL DEGRADATION</strong>
+      If the model fails to load for any reason, Cyon prints a clear error and <strong>keeps running</strong>. All slash commands (/pyra, /term, /clear, etc.) remain fully functional without the AI.
+    </div>
+  </section>
+
+  <!-- TOOL SYSTEM -->
+  <section id="tools">
+    <h2>cyon_local.py — Tool System</h2>
+    <p><code>cyon_local.py</code> gives Cyon the ability to run real commands on your system in response to natural language. When the model needs a tool, it outputs a <code>TOOL:</code> line which is intercepted and executed automatically.</p>
+
+    <h3>Tool Call Format</h3>
+    <div class="code-block">TOOL: tool_name argument</div>
+
+    <h3>Built-in Tools</h3>
+    <table>
+      <tr><th>Tool</th><th>Format</th><th>Description</th></tr>
+      <tr><td>shell</td><td>TOOL: shell &lt;command&gt;</td><td>Run any bash command and return output</td></tr>
+      <tr><td>file_check</td><td>TOOL: file_check &lt;path&gt;</td><td>Check if a file exists and get its size</td></tr>
+      <tr><td>ping</td><td>TOOL: ping &lt;host&gt;</td><td>Ping a host or IP address</td></tr>
+      <tr><td>whois</td><td>TOOL: whois &lt;domain&gt;</td><td>Domain registration lookup</td></tr>
+      <tr><td>launch</td><td>TOOL: launch &lt;app&gt;</td><td>Open an app in a new terminal window</td></tr>
+    </table>
+
+    <h3>Launch Tool — Supported Apps</h3>
+    <table>
+      <tr><th>App Name</th><th>Launches</th></tr>
+      <tr><td>pyra_toolz / pyra</td><td>~/cyon/pyra_tool/pyra_toolz</td></tr>
+      <tr><td>cyon_cli</td><td>~/cyon/bin/cyon_cli</td></tr>
+    </table>
+
+    <h3>Example Prompts</h3>
+    <div class="code-block"><span class="c"># These trigger tool calls automatically</span>
+what processes are running on my system
+how much disk space do i have left
+check if the file ~/cyon/cyon_local.py exists
+ping google.com
+run pyra_toolz</div>
+
+    <h3>Adding Your Own Tools</h3>
+    <p>Add a function and register it in the <code>TOOLS</code> dict in <code>cyon_local.py</code>:</p>
+    <div class="code-block"><button class="copy-btn" onclick="cp(this)">COPY</button><span class="cy">def</span> <span class="g">tool_mycommand</span>(arg):
+    result = subprocess.check_output([<span class="wh">"my_command"</span>, arg], timeout=<span class="am">10</span>)
+    <span class="cy">return</span> result.decode(<span class="wh">"utf-8"</span>)[:<span class="am">500</span>]
+
+TOOLS = {
+    <span class="c"># ... existing tools ...</span>
+    <span class="wh">"mycommand"</span>: tool_mycommand,
+}</div>
+    <p>Then add an example line to <code>SYSTEM_PROMPT</code> so the model knows when to use it.</p>
+
+    <h3>Slash Commands (always available)</h3>
+    <p>These work whether or not the LLM is loaded:</p>
+    <table>
+      <tr><th>Command</th><th>Description</th></tr>
+      <tr><td>/shutdown</td><td>Shut down the PC</td></tr>
+      <tr><td>/bye</td><td>Exit Cyon gracefully</td></tr>
+      <tr><td>/clear</td><td>Clear conversation history</td></tr>
+      <tr><td>/pyra</td><td>Launch pyra_toolz in a new terminal</td></tr>
+      <tr><td>/cyon_cli</td><td>Launch Cyon CLI in a new terminal</td></tr>
+      <tr><td>/term</td><td>Open a new terminal window</td></tr>
+      <tr><td>/status</td><td>Show model load status and history length</td></tr>
     </table>
   </section>
 
