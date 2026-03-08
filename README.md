@@ -99,7 +99,7 @@ Create a bot at [discord.com/developers](https://discord.com/developers), then a
 
 ## 🤖 Ollama + Llama 3
 
-Cyon manages the Ollama server directly from the GTK control panel. Start/stop buttons for OLLAMA SERVER, LOCAL CYON, DISCORD BOT, and CYON TOOLS are on the main window. All four rows include a `● ONLINE / ● OFFLINE` status indicator.
+Cyon manages the Ollama server directly from the GTK control panel. Start/stop buttons for OLLAMA SERVER, LOCAL CYON, and DISCORD BOT are on the main window. Each row has a `● ONLINE / ● OFFLINE` status indicator.
 
 ### Setup
 ```bash
@@ -145,7 +145,7 @@ Then update `cyon_local.py` and `cyon_bot.py` to use `"cyon"` as the model name.
 
 | File | Purpose |
 |------|---------|
-| `cyon_local.py` | Local AI chatbot — connects to Ollama, handles chat and slash commands |
+| `cyon_local.py` | Local AI chatbot — connects to Ollama, handles chat queries only |
 | `cyon_tools.py` | Tool engine — llama.cpp powered, executes real shell commands, ping, whois, file checks, app launches |
 | `cyon_bot.py` | Discord bot — relays messages through Ollama |
 | `cyon_shell.py` | Shell backbone — always running, handles slash commands even when AI is offline |
