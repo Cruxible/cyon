@@ -27,11 +27,30 @@ SPEED_MAX   = 3
 
 # Cyon palette — cyan-green on near-black
 COL_BG      = (0.039, 0.039, 0.059)        # #0a0a0f
-COL_HEAD    = (0.85,  1.00,  1.00)         # near-white head
-COL_HOT     = (0.00,  1.00,  0.60)         # #00ff99  bright body
-COL_MID     = (0.00,  0.80,  0.47)         # #00cc77  mid body
-COL_DIM     = (0.00,  0.40,  0.25)         # dim tail
-COL_FADE    = (0.00,  0.15,  0.10)         # ghost tail
+
+# Green palette
+GREEN_HEAD  = (0.85,  1.00,  1.00)
+GREEN_HOT   = (0.00,  1.00,  0.60)
+GREEN_MID   = (0.00,  0.80,  0.47)
+GREEN_DIM   = (0.00,  0.40,  0.25)
+GREEN_FADE  = (0.00,  0.15,  0.10)
+
+# Amber palette (#E8A020 base)
+AMBER_HEAD  = (1.00,  0.95,  0.80)
+AMBER_HOT   = (0.91,  0.627, 0.125)        # #E8A020
+AMBER_MID   = (0.72,  0.47,  0.07)
+AMBER_DIM   = (0.40,  0.25,  0.03)
+AMBER_FADE  = (0.18,  0.10,  0.01)
+
+# Active palette (swapped at runtime)
+COL_HEAD    = GREEN_HEAD
+COL_HOT     = GREEN_HOT
+COL_MID     = GREEN_MID
+COL_DIM     = GREEN_DIM
+COL_FADE    = GREEN_FADE
+
+# Color modes
+COLOR_MODES = ["GREEN", "AMBER", "MIX"]
 
 # Glyphs: half-width katakana + digits + symbols
 _KATA = [chr(c) for c in range(0xFF66, 0xFF9E)]
@@ -127,10 +146,32 @@ class CMatrixWidget(Gtk.DrawingArea):
         self._n_cols = 0
         self._n_rows = 0
         self._font   = "monospace"
+        self._color_mode = "GREEN"   # "GREEN" | "AMBER" | "MIX"
+        self._col_palette: list[str] = []
 
         self.connect("draw", self._on_draw)
         self.connect("size-allocate", self._on_size_allocate)
         self._timer = GLib.timeout_add(SPEED_MS, self._on_tick)
+
+    def _get_palette(self, col_idx: int):
+        """Return (HEAD, HOT, MID, DIM, FADE) tuple for the given column."""
+        mode = self._color_mode
+        if mode == "GREEN":
+            return GREEN_HEAD, GREEN_HOT, GREEN_MID, GREEN_DIM, GREEN_FADE
+        elif mode == "AMBER":
+            return AMBER_HEAD, AMBER_HOT, AMBER_MID, AMBER_DIM, AMBER_FADE
+        else:  # MIX — stable per-column colour assignment
+            while len(self._col_palette) <= col_idx:
+                self._col_palette.append(random.choice(["GREEN", "AMBER"]))
+            p = self._col_palette[col_idx]
+            if p == "GREEN":
+                return GREEN_HEAD, GREEN_HOT, GREEN_MID, GREEN_DIM, GREEN_FADE
+            else:
+                return AMBER_HEAD, AMBER_HOT, AMBER_MID, AMBER_DIM, AMBER_FADE
+
+    def set_color_mode(self, mode: str):
+        self._color_mode = mode
+        self._col_palette.clear()
 
     # ── resize ─────────────────────────────────────────────────────────────────
     def _on_size_allocate(self, _widget, alloc):
@@ -172,6 +213,7 @@ class CMatrixWidget(Gtk.DrawingArea):
                 continue
             x = col_idx * CELL
             head = col.row
+            P_HEAD, P_HOT, P_MID, P_DIM, P_FADE = self._get_palette(col_idx)
 
             for i in range(col.length):
                 row = head - i
@@ -181,24 +223,24 @@ class CMatrixWidget(Gtk.DrawingArea):
 
                 # colour by position in trail
                 if i == 0:
-                    r, g, b = COL_HEAD
+                    r, g, b = P_HEAD
                 elif i == 1:
-                    r, g, b = COL_HOT
+                    r, g, b = P_HOT
                 elif i < col.length // 3:
                     t = i / (col.length // 3)
-                    r = COL_HOT[0] * (1 - t) + COL_MID[0] * t
-                    g = COL_HOT[1] * (1 - t) + COL_MID[1] * t
-                    b = COL_HOT[2] * (1 - t) + COL_MID[2] * t
+                    r = P_HOT[0] * (1 - t) + P_MID[0] * t
+                    g = P_HOT[1] * (1 - t) + P_MID[1] * t
+                    b = P_HOT[2] * (1 - t) + P_MID[2] * t
                 elif i < col.length * 2 // 3:
                     t = (i - col.length // 3) / (col.length // 3)
-                    r = COL_MID[0] * (1 - t) + COL_DIM[0] * t
-                    g = COL_MID[1] * (1 - t) + COL_DIM[1] * t
-                    b = COL_MID[2] * (1 - t) + COL_DIM[2] * t
+                    r = P_MID[0] * (1 - t) + P_DIM[0] * t
+                    g = P_MID[1] * (1 - t) + P_DIM[1] * t
+                    b = P_MID[2] * (1 - t) + P_DIM[2] * t
                 else:
                     t = (i - col.length * 2 // 3) / max(1, col.length // 3)
-                    r = COL_DIM[0] * (1 - t) + COL_FADE[0] * t
-                    g = COL_DIM[1] * (1 - t) + COL_FADE[1] * t
-                    b = COL_DIM[2] * (1 - t) + COL_FADE[2] * t
+                    r = P_DIM[0] * (1 - t) + P_FADE[0] * t
+                    g = P_DIM[1] * (1 - t) + P_FADE[1] * t
+                    b = P_DIM[2] * (1 - t) + P_FADE[2] * t
 
                 cr.set_source_rgb(r, g, b)
                 glyph = col.glyphs[i % TRAIL_MAX]
@@ -246,6 +288,11 @@ class CMatrixWindow(Gtk.ApplicationWindow):
         self._pause_btn = Gtk.Button(label="⏸  PAUSE")
         self._pause_btn.connect("clicked", self._toggle_pause)
         hbar.pack_end(self._pause_btn, False, False, 0)
+
+        self._color_btn = Gtk.Button(label="🟢  GREEN")
+        self._color_btn.connect("clicked", self._cycle_color)
+        hbar.pack_end(self._color_btn, False, False, 0)
+        self._color_idx = 0
 
         sep_top = Gtk.Separator()
         vbox.pack_start(sep_top, False, False, 0)
@@ -301,6 +348,15 @@ class CMatrixWindow(Gtk.ApplicationWindow):
             self._paused = True
             self._pause_btn.set_label("▶  RESUME")
             self._status.set_text("▸ PAUSED. REALITY RESTORED.")
+
+    # ── color mode cycle ──────────────────────────────────────────────────────
+    _MODE_LABELS = ["🟢  GREEN", "🟠  AMBER", "⬡  MIX"]
+
+    def _cycle_color(self, _btn):
+        self._color_idx = (self._color_idx + 1) % 3
+        mode = COLOR_MODES[self._color_idx]
+        self._matrix.set_color_mode(mode)
+        self._color_btn.set_label(self._MODE_LABELS[self._color_idx])
 
     # ── keyboard ──────────────────────────────────────────────────────────────
     def _on_key(self, _w, ev):
