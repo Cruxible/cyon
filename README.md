@@ -246,7 +246,7 @@ These slash-commands are handled by `cyon_shell.py` and work from the input fiel
 | Tools → Editor Tools → Stitch Audio | Concatenate two audio files into one |
 | Tools → Convert Pics | GTK image format converter |
 | Tools → Create Tarfile | GTK tarball creator and encryptor |
-| Tools → Pyra Notes/TTS | Combined notes editor + Piper TTS — write/save/load notes, speak selection or all text, JOE ♂ / LESSAC ♀ voice toggle |
+| Tools → Pyra Notes/TTS | GTK notes editor + Piper TTS — FILE dropdown menu (New, Load, Save, Delete, Text +/−), opens .txt/.py/.c/.sh and extensionless files, syntax highlighting, adjustable text size, JOE ♂ / LESSAC ♀ voice toggle |
 | Security → Defense → Watcher | Toggle filesystem watcher |
 | Security → Defense → Firewall | Firewall controls |
 | Security → Offense → Port Scanner | Network port scanner |
@@ -309,7 +309,7 @@ deactivate
 | `concat_aud.py` | Stitch two audio files together → MP3 |
 | `gtk_convert.py` | GTK image format converter |
 | `tarmaker_gtk3.py` | GTK tarball creator and encryptor |
-| `pyra_notes.py` | GTK notes editor + Piper TTS — write/save/load notes from `~/Documents/pyra_dev_notes`, speak selection or full text, JOE ♂ / LESSAC ♀ voice toggle |
+| `pyra_notes.py` | GTK notes editor + Piper TTS — write/save/load/delete notes, open `.txt` `.py` `.c` `.sh` and extensionless bash/executable files, speak selection or full text, JOE ♂ / LESSAC ♀ voice toggle, syntax highlighting (amber/cyan/steel-blue/lime/coral), adjustable editor text size |
 | `pyra_player.py` | GTK media player |
 | `pyra_downloader.py` | GTK YouTube/audio/video downloader via yt-dlp (standalone) |
 
@@ -318,6 +318,23 @@ deactivate
 🗒️ Pyra Notes/TTS
 
 Pyra Notes/TTS is a combined GTK notes editor and Piper text-to-speech tool, launched from Tools → Pyra Notes/TTS in the Programs menu. Notes are saved to and loaded from `~/Documents/pyra_dev_notes`. The TTS section lets you speak selected text or the full note using either the JOE ♂ or LESSAC ♀ Piper voice. The Discord bot `/say` command also uses Piper to generate voice replies.
+
+**FILE dropdown menu** — a single FILE button replaces the old row of buttons. It contains:
+- `NEW` — clear editor and start a new note
+- `LOAD` — open file dialog (supports `.txt`, `.py`, `.c`, `.h`, `.sh`, extensionless executables/bash scripts, and all files)
+- `SAVE` — save current file (auto-adds `.txt` for new names with no extension)
+- `DELETE FILE` — delete the currently open file with confirmation
+- `TEXT +` / `TEXT −` — increase or decrease editor font size (8px–36px, steps of 2). The log terminal is unaffected and stays fixed size.
+
+**Syntax highlighting** — keywords are highlighted in the editor by color group. All groups are defined as constants at the top of the file and are easy to extend:
+
+| Color | Hex | Keywords |
+|-------|-----|----------|
+| Amber | `#E8A020` | `print for while if elif else` |
+| Cyan | `#00cccc` | `def class return import from` |
+| Steel blue | `#7ec8e3` | `try except` + `=` operator + `@staticmethod` |
+| Lime | `#c8ff00` | class name — the identifier immediately after `class` |
+| Coral | `#ff9955` | reserved — add words to `HIGHLIGHT_KEYWORDS_CORAL` |
 
 ⚠️ Piper and a voice model must both be installed or TTS will not work.
 

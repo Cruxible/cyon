@@ -439,6 +439,7 @@ footer {
   <a href="#commands">CLI Commands</a>
   <a href="#pyra-lib">pyra_lib Tools</a>
   <a href="#gtk-lib">gtk_lib Tools</a>
+  <a href="#pyra-notes">Pyra Notes / TTS</a>
 
   <span class="nav-section">MANAGE</span>
   <a href="#compile-menu">compile_cyon Menu</a>
@@ -783,7 +784,7 @@ You are running inside the Cyon desktop application on the user's machine.
       <tr><td>Tools → Editor Tools → Stitch Audio</td><td>Concatenate two audio files → MP3</td></tr>
       <tr><td>Tools → Convert Pics</td><td>GTK image format converter</td></tr>
       <tr><td>Tools → Create Tarfile</td><td>Create, encrypt, decrypt tarballs</td></tr>
-      <tr><td>Tools → Pyra Notes/TTS</td><td>GTK notes editor with built-in Piper TTS — save/load notes, speak selection or full text with JOE ♂ / LESSAC ♀ voice toggle</td></tr>
+      <tr><td>Tools → Pyra Notes/TTS</td><td>GTK notes editor + Piper TTS — FILE dropdown (New, Load, Save, Delete, Text&nbsp;+/−), opens .txt/.py/.c/.sh and extensionless files, syntax highlighting, adjustable text size, JOE&nbsp;♂ / LESSAC&nbsp;♀ voice toggle</td></tr>
       <tr><td>Security → Defense → Watcher</td><td>Toggle filesystem watcher (toggle: kills if running)</td></tr>
       <tr><td>Security → Defense → Firewall</td><td>Firewall controls</td></tr>
       <tr><td>Security → Offense → Port Scanner</td><td>Network port scanner</td></tr>
@@ -851,7 +852,7 @@ You are running inside the Cyon desktop application on the user's machine.
       <tr><td>concat_aud.py</td><td>Stitch two audio files → MP3</td></tr>
       <tr><td>gtk_convert.py</td><td>GTK image format converter</td></tr>
       <tr><td>tarmaker_gtk3.py</td><td>GTK tarball creator/encryptor</td></tr>
-      <tr><td>pyra_notes.py</td><td>GTK notes editor + Piper TTS — write/save/load notes from <code>~/Documents/pyra_dev_notes</code>, speak selection or all text, JOE ♂ / LESSAC ♀ voice toggle</td></tr>
+      <tr><td>pyra_notes.py</td><td>GTK notes editor + Piper TTS — FILE dropdown (New, Load, Save, Delete, Text&nbsp;+/−), opens <code>.txt</code> <code>.py</code> <code>.c</code> <code>.sh</code> and extensionless bash/executable files, syntax highlighting (amber / cyan / steel-blue / lime / coral), adjustable editor text size (log terminal unaffected), JOE&nbsp;♂ / LESSAC&nbsp;♀ voice toggle</td></tr>
       <tr><td>pyra_player.py</td><td>GTK media player</td></tr>
       <tr><td>pyra_downloader.py</td><td>Standalone GTK YouTube/audio/video downloader (yt-dlp)</td></tr>
     </table>
@@ -860,6 +861,48 @@ You are running inside the Cyon desktop application on the user's machine.
       <strong>// MOVIEPY V2 NOTES</strong>
       <code>subclip</code> → <code>subclipped</code> &nbsp;|&nbsp; <code>set_audio</code> → <code>with_audio</code> &nbsp;|&nbsp; Volume: use <code>MultiplyVolume</code> effect. All tools reflect these changes.
     </div>
+  </section>
+
+  <!-- PYRA NOTES -->
+  <section id="pyra-notes">
+    <h2>Pyra Notes / TTS</h2>
+    <p>A combined GTK notes editor and Piper text-to-speech tool. Lives at <code>~/cyon/pyra_lib/gtk_lib/pyra_notes.py</code>. Notes are stored in <code>~/Documents/pyra_dev_notes</code>.</p>
+
+    <h3>FILE Menu</h3>
+    <p>A single <strong>FILE</strong> button replaces the old row of individual buttons. It drops down with:</p>
+    <table>
+      <tr><th>Item</th><th>What It Does</th></tr>
+      <tr><td>NEW</td><td>Clears the editor and resets the filename field</td></tr>
+      <tr><td>LOAD</td><td>Opens a file dialog — supports <code>.txt</code>, <code>.py</code>, <code>.c</code>, <code>.h</code>, <code>.sh</code>, extensionless bash/executables, and all files</td></tr>
+      <tr><td>SAVE</td><td>Saves to the current path. Auto-appends <code>.txt</code> only for brand-new names with no extension. Existing extensions are preserved.</td></tr>
+      <tr><td>DELETE FILE</td><td>Deletes the open file after a confirmation dialog</td></tr>
+      <tr><td>TEXT +</td><td>Increase editor font size by 2px (max 36px)</td></tr>
+      <tr><td>TEXT −</td><td>Decrease editor font size by 2px (min 8px)</td></tr>
+    </table>
+
+    <div class="info">
+      <strong>// TEXT SIZE</strong>
+      TEXT + / TEXT − only affect the main editor view. The log terminal at the bottom is fixed size and unaffected.
+    </div>
+
+    <h3>Syntax Highlighting</h3>
+    <p>Keywords are highlighted live as you type. Each color group is a pair of constants at the top of <code>pyra_notes.py</code> — easy to add new words or colors:</p>
+    <table>
+      <tr><th>Color</th><th>Hex</th><th>Keywords / Pattern</th></tr>
+      <tr><td style="color:#E8A020">Amber</td><td><code>#E8A020</code></td><td>print, for, while, if, elif, else</td></tr>
+      <tr><td style="color:#00cccc">Cyan</td><td><code>#00cccc</code></td><td>def, class, return, import, from</td></tr>
+      <tr><td style="color:#7ec8e3">Steel blue</td><td><code>#7ec8e3</code></td><td>try, except, <code>=</code> operator, <code>@staticmethod</code></td></tr>
+      <tr><td style="color:#c8ff00">Lime</td><td><code>#c8ff00</code></td><td>Class name — identifier immediately after <code>class</code></td></tr>
+      <tr><td style="color:#ff9955">Coral</td><td><code>#ff9955</code></td><td>Reserved — add words to <code>HIGHLIGHT_KEYWORDS_CORAL</code></td></tr>
+    </table>
+
+    <div class="amber-box">
+      <strong>// ADDING A NEW COLOR GROUP</strong>
+      Add a <code>HIGHLIGHT_KEYWORDS_FOO = [...]</code> and <code>HIGHLIGHT_COLOR_FOO = "#rrggbb"</code> constant at the top of the file, create a tag for it in <code>__init__</code>, and add a sweep for it in <code>_apply_highlighting</code>. Each group is self-contained.
+    </div>
+
+    <h3>TTS</h3>
+    <p>The TTS row lets you speak selected text or the full note using either the <strong>JOE ♂</strong> or <strong>LESSAC ♀</strong> Piper voice. Piper and a voice model must both be installed — run <code>compile_cyon</code> option 2 to set this up automatically.</p>
   </section>
 
   <!-- COMPILE MENU -->
