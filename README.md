@@ -19,7 +19,7 @@ Cyon is a hybrid GTK and CLI-based desktop tool built in C. It serves as a contr
 - ✅ Pyra tool launcher — launches pyra_toolz directly from the Programs menu
 - ✅ pyra_lib — a collection of Python utility tools powered by pyra_env
 - ✅ gtk_lib — GTK-based audio/video editing suite and media tools
-- ✅ Cyon TTS — text-to-speech tool (Piper)
+- ✅ Pyra Notes/TTS — combined GTK notes editor and Piper text-to-speech tool
 - ✅ Pyra Player — GTK media player
 
 ---
@@ -246,7 +246,7 @@ These slash-commands are handled by `cyon_shell.py` and work from the input fiel
 | Tools → Editor Tools → Stitch Audio | Concatenate two audio files into one |
 | Tools → Convert Pics | GTK image format converter |
 | Tools → Create Tarfile | GTK tarball creator and encryptor |
-| Tools → Cyon TTS | Text-to-speech tool (Piper) — requires Piper models in `~/cyon/piper_models/` |
+| Tools → Pyra Notes/TTS | Combined notes editor + Piper TTS — write/save/load notes, speak selection or all text, JOE ♂ / LESSAC ♀ voice toggle |
 | Security → Defense → Watcher | Toggle filesystem watcher |
 | Security → Defense → Firewall | Firewall controls |
 | Security → Offense → Port Scanner | Network port scanner |
@@ -309,16 +309,15 @@ deactivate
 | `concat_aud.py` | Stitch two audio files together → MP3 |
 | `gtk_convert.py` | GTK image format converter |
 | `tarmaker_gtk3.py` | GTK tarball creator and encryptor |
-| `cyon_tts.py` | Text-to-speech interface (Piper) — requires Piper models in `~/cyon/piper_models/` |
+| `pyra_notes.py` | GTK notes editor + Piper TTS — write/save/load notes from `~/Documents/pyra_dev_notes`, speak selection or full text, JOE ♂ / LESSAC ♀ voice toggle |
 | `pyra_player.py` | GTK media player |
 | `pyra_downloader.py` | GTK YouTube/audio/video downloader via yt-dlp (standalone) |
 
 ---
 
-🔊 Cyon TTS (Text-to-Speech)
+🗒️ Pyra Notes/TTS
 
-Cyon TTS is powered by Piper
- and launched from Tools → Cyon TTS in the Programs menu. The Discord bot /say command also uses Piper to generate voice replies.
+Pyra Notes/TTS is a combined GTK notes editor and Piper text-to-speech tool, launched from Tools → Pyra Notes/TTS in the Programs menu. Notes are saved to and loaded from `~/Documents/pyra_dev_notes`. The TTS section lets you speak selected text or the full note using either the JOE ♂ or LESSAC ♀ Piper voice. The Discord bot `/say` command also uses Piper to generate voice replies.
 
 ⚠️ Piper and a voice model must both be installed or TTS will not work.
 
