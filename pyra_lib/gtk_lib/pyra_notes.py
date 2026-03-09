@@ -10,6 +10,7 @@ import os
 import sys
 import subprocess
 import threading
+import configparser
 from pathlib import Path
 
 # ── pyra_env path setup ──────────────────────────────────────────────────────
@@ -20,7 +21,8 @@ if site_pkgs:
     sys.path.insert(0, str(site_pkgs[0]))
 sys.path.append(str(PYRA_LIB))
 
-NOTES_DIR = os.path.expanduser("~/Documents/pyra_dev_notes")
+NOTES_DIR   = os.path.expanduser("~/Documents/pyra_dev_notes")
+CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pyra_notes.conf")
 
 # ── Syntax highlighting ──────────────────────────────────────────────────────
 HIGHLIGHT_KEYWORDS        = ["print", "for", "while", "if", "elif", "else"]
@@ -37,6 +39,10 @@ HIGHLIGHT_COLOR_LIME      = "#c8ff00"  # lime — class name (word after 'class'
 # NOTE: class names use a capture-group regex, no keyword list needed
 
 HIGHLIGHT_COLOR_CORAL     = "#ff9955"  # coral — reserved for future keywords
+
+HIGHLIGHT_COLOR_STRING    = "#ff4444"  # true red — quoted strings (' and ")
+
+HIGHLIGHT_COLOR_COMMENT   = "#aa00ff"  # bright purple — # and // comments
 
 VOICES = {
     "joe": {
@@ -171,11 +177,60 @@ textview, textview text {
     font-size: 15px;
 }
 separator { background-color: #1a2a20; }
+.tree-panel {
+    background-color: #08080e;
+    border-left: 1px solid #1a2a20;
+}
+.tree-header {
+    color: #336655;
+    font-family: monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    padding: 4px 6px;
+    background-color: #080810;
+    border-bottom: 1px solid #1a2a20;
+}
+treeview {
+    background-color: #08080e;
+    color: #00cc77;
+    font-family: monospace;
+    font-size: 12px;
+}
+treeview:selected {
+    background-color: #003322;
+    color: #00ff99;
+}
+.btn-tree {
+    background-color: #08080e;
+    color: #336655;
+    font-family: monospace;
+    font-size: 10px;
+    border: 1px solid #1a2a20;
+    border-radius: 0px;
+    padding: 3px 8px;
+    letter-spacing: 1px;
+}
+.btn-tree:hover {
+    background-color: #003322;
+    color: #00ff99;
+    border-color: #00ff99;
+}
 """
 
 
 def ensure_notes_dir():
     os.makedirs(NOTES_DIR, exist_ok=True)
+
+
+def load_config():
+    cfg = configparser.ConfigParser()
+    cfg.read(CONFIG_PATH)
+    return cfg
+
+
+def save_config(cfg):
+    with open(CONFIG_PATH, "w") as f:
+        cfg.write(f)
 
 
 class PyraNotesWindow(Gtk.Window):
@@ -187,6 +242,10 @@ class PyraNotesWindow(Gtk.Window):
         self.current_file  = None
         self.current_voice = "joe"
         self.text_size     = 15  # default px, matches CSS
+
+        # ── load config ──────────────────────────────────────────────────
+        self._cfg = load_config()
+        self._tree_folder = self._cfg.get("ui", "tree_folder", fallback=NOTES_DIR)
 
         # ── CSS ──────────────────────────────────────────────────────────
         provider = Gtk.CssProvider()
@@ -228,6 +287,8 @@ class PyraNotesWindow(Gtk.Window):
             (None,           None),
             ("TEXT  +",      self.on_text_size_increase),
             ("TEXT  −",      self.on_text_size_decrease),
+            (None,           None),
+            ("HIDE TREE",    self._on_tree_toggle),
         ]:
             if label is None:
                 self._file_menu.append(Gtk.SeparatorMenuItem())
@@ -235,6 +296,8 @@ class PyraNotesWindow(Gtk.Window):
                 item = Gtk.MenuItem(label=label)
                 item.connect("activate", cb)
                 self._file_menu.append(item)
+                if label == "HIDE TREE":
+                    self._tree_toggle_item = item  # keep ref to update label
         self._file_menu.show_all()
 
         menu_btn = Gtk.Button(label="FILE")
@@ -266,9 +329,59 @@ class PyraNotesWindow(Gtk.Window):
         self._kw_tag_coral = self.text_buffer.create_tag(
             "keyword_coral", foreground=HIGHLIGHT_COLOR_CORAL
         )
+        self._kw_tag_string = self.text_buffer.create_tag(
+            "string", foreground=HIGHLIGHT_COLOR_STRING
+        )
+        self._kw_tag_comment = self.text_buffer.create_tag(
+            "comment", foreground=HIGHLIGHT_COLOR_COMMENT
+        )
         self.text_buffer.connect("changed", self._on_text_changed)
+        self.text_view.connect("key-press-event", self._on_key_press)
         scroll.add(self.text_view)
-        outer.pack_start(scroll, True, True, 0)
+
+        # ── File tree panel ───────────────────────────────────────────────
+        self._tree_panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self._tree_panel.get_style_context().add_class("tree-panel")
+        tree_panel = self._tree_panel
+
+        # header row: label + folder picker button
+        tree_hdr = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        tree_hdr.set_border_width(4)
+        tree_lbl = Gtk.Label(label="▸ FILES")
+        tree_lbl.get_style_context().add_class("tree-header")
+        tree_lbl.set_halign(Gtk.Align.START)
+        tree_hdr.pack_start(tree_lbl, True, True, 0)
+
+        btn_pick = Gtk.Button(label="⊞ FOLDER")
+        btn_pick.get_style_context().add_class("btn-tree")
+        btn_pick.connect("clicked", self._on_tree_pick_folder)
+        tree_hdr.pack_start(btn_pick, False, False, 0)
+        tree_panel.pack_start(tree_hdr, False, False, 0)
+
+        # TreeView
+        self._tree_store = Gtk.TreeStore(str, str)  # col0=display name, col1=full path
+        self._tree_view  = Gtk.TreeView(model=self._tree_store)
+        self._tree_view.set_headers_visible(False)
+        self._tree_view.set_enable_tree_lines(True)
+        renderer = Gtk.CellRendererText()
+        col = Gtk.TreeViewColumn("File", renderer, text=0)
+        self._tree_view.append_column(col)
+        self._tree_view.connect("row-activated", self._on_tree_row_activated)
+
+        tree_scroll = Gtk.ScrolledWindow()
+        tree_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        tree_scroll.add(self._tree_view)
+        tree_panel.pack_start(tree_scroll, True, True, 0)
+
+        # ── Paned: editor left, tree right ───────────────────────────────
+        paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
+        paned.pack1(scroll, True, True)
+        paned.pack2(tree_panel, False, False)
+        paned.set_position(580)
+        outer.pack_start(paned, True, True, 0)
+
+        # populate tree with last used folder
+        self._populate_tree(self._tree_folder)
 
         outer.pack_start(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), False, False, 2)
 
@@ -349,6 +462,8 @@ class PyraNotesWindow(Gtk.Window):
         buf.remove_tag(self._kw_tag_steel, start, end)
         buf.remove_tag(self._kw_tag_lime,  start, end)
         buf.remove_tag(self._kw_tag_coral, start, end)
+        buf.remove_tag(self._kw_tag_string, start, end)
+        buf.remove_tag(self._kw_tag_comment, start, end)
         text = buf.get_text(start, end, True)
 
         # amber — control flow keywords
@@ -390,12 +505,150 @@ class PyraNotesWindow(Gtk.Window):
                 buf.get_iter_at_offset(m.start(1)),
                 buf.get_iter_at_offset(m.end(1)))
 
+        # true red — single and double quoted strings (including the quotes)
+        # handles both 'single' and "double", skips triple-quoted for simplicity
+        for m in re.finditer(r'("(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\')', text):
+            buf.apply_tag(self._kw_tag_string,
+                buf.get_iter_at_offset(m.start()),
+                buf.get_iter_at_offset(m.end()))
+
+        # bright purple — # comments (Python/bash) and // comments (C)
+        # matches from # or // to end of line; painted last to override everything
+        for m in re.finditer(r'(#[^\n]*|//[^\n]*)', text):
+            buf.apply_tag(self._kw_tag_comment,
+                buf.get_iter_at_offset(m.start()),
+                buf.get_iter_at_offset(m.end()))
+
+    # ── file tree ─────────────────────────────────────────────────────────
+
+    def _populate_tree(self, folder):
+        """Build the TreeStore from the given folder path."""
+        self._tree_store.clear()
+        if not os.path.isdir(folder):
+            return
+        self._tree_folder = folder
+        # persist to config
+        if not self._cfg.has_section("ui"):
+            self._cfg.add_section("ui")
+        self._cfg.set("ui", "tree_folder", folder)
+        save_config(self._cfg)
+
+        root_label = os.path.basename(folder) or folder
+        root_iter  = self._tree_store.append(None, [f"📁 {root_label}", folder])
+        self._add_tree_children(root_iter, folder)
+        self._tree_view.expand_row(
+            self._tree_store.get_path(root_iter), False
+        )
+
+    def _add_tree_children(self, parent_iter, folder):
+        """Recursively add dirs then files under parent_iter."""
+        try:
+            entries = sorted(os.scandir(folder), key=lambda e: (not e.is_dir(), e.name.lower()))
+        except PermissionError:
+            return
+        for entry in entries:
+            if entry.name.startswith("."):
+                continue
+            if entry.is_dir(follow_symlinks=False):
+                child = self._tree_store.append(parent_iter, [f"▸ {entry.name}", entry.path])
+                self._add_tree_children(child, entry.path)
+            else:
+                self._tree_store.append(parent_iter, [entry.name, entry.path])
+
+    def _on_tree_pick_folder(self, _btn):
+        dialog = Gtk.FileChooserDialog(
+            title="Choose Folder", parent=self,
+            action=Gtk.FileChooserAction.SELECT_FOLDER,
+        )
+        dialog.add_buttons(
+            Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
+            Gtk.STOCK_OPEN,   Gtk.ResponseType.OK,
+        )
+        dialog.set_current_folder(self._tree_folder)
+        if dialog.run() == Gtk.ResponseType.OK:
+            self._populate_tree(dialog.get_filename())
+        dialog.destroy()
+
+    def _on_tree_row_activated(self, tree_view, path, _col):
+        it   = self._tree_store.get_iter(path)
+        fpath = self._tree_store.get_value(it, 1)
+        if os.path.isfile(fpath):
+            try:
+                with open(fpath, "r", encoding="utf-8") as f:
+                    self.text_buffer.set_text(f.read())
+                self._apply_highlighting(self.text_buffer)
+                self.current_file = fpath
+                basename = os.path.basename(fpath)
+                display  = basename[:-4] if basename.endswith(".txt") else basename
+                self.filename_entry.set_text(display)
+                self.log(f"▸ Loaded: {fpath}")
+            except Exception as e:
+                self.log(f"▸ ERROR loading: {e}")
+
+    def _on_tree_toggle(self, _item):
+        if self._tree_panel.get_visible():
+            self._tree_panel.hide()
+            self._tree_toggle_item.set_label("SHOW TREE")
+        else:
+            self._tree_panel.show()
+            self._tree_toggle_item.set_label("HIDE TREE")
+
     # ── file menu ─────────────────────────────────────────────────────────
 
     def _on_file_menu_clicked(self, btn):
         self._file_menu.popup_at_widget(
             btn, Gdk.Gravity.SOUTH_WEST, Gdk.Gravity.NORTH_WEST, None
         )
+
+    # ── keyboard shortcuts ────────────────────────────────────────────────
+
+    def _on_key_press(self, widget, event):
+        ctrl = event.state & Gdk.ModifierType.CONTROL_MASK
+
+        # ── Ctrl+S — save ─────────────────────────────────────────────────
+        if ctrl and event.keyval == Gdk.KEY_s:
+            self.on_save(None)
+            return True
+
+        # ── Ctrl++ / Ctrl+= — text size up ────────────────────────────────
+        if ctrl and event.keyval in (Gdk.KEY_plus, Gdk.KEY_equal, Gdk.KEY_KP_Add):
+            self.on_text_size_increase(None)
+            return True
+
+        # ── Ctrl+- — text size down ───────────────────────────────────────
+        if ctrl and event.keyval in (Gdk.KEY_minus, Gdk.KEY_KP_Subtract):
+            self.on_text_size_decrease(None)
+            return True
+
+        # ── Tab — insert 4 spaces ─────────────────────────────────────────
+        if event.keyval == Gdk.KEY_Tab:
+            self.text_buffer.insert_at_cursor("    ")
+            return True
+
+        # ── Enter — smart indent ──────────────────────────────────────────
+        if event.keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
+            buf    = self.text_buffer
+            cursor = buf.get_iter_at_mark(buf.get_insert())
+
+            line_start = cursor.copy()
+            line_start.set_line_offset(0)
+            line_text = buf.get_text(line_start, cursor, False)
+
+            stripped     = line_text.lstrip()
+            base_indent  = len(line_text) - len(stripped)
+            indent       = " " * base_indent
+
+            INDENT_TRIGGERS = {"if", "elif", "else", "except", "def",
+                               "for", "while", "with", "try", "finally",
+                               "class"}
+            first_word = stripped.split()[0].rstrip("(") if stripped.split() else ""
+            if stripped.endswith(":") and first_word in INDENT_TRIGGERS:
+                indent += "    "
+
+            buf.insert_at_cursor("\n" + indent)
+            return True
+
+        return False
 
     # ── text size ─────────────────────────────────────────────────────────
 
