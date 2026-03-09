@@ -24,25 +24,24 @@ sys.path.append(str(PYRA_LIB))
 NOTES_DIR   = os.path.expanduser("~/Documents/pyra_dev_notes")
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pyra_notes.conf")
 
-# ── Syntax highlighting ──────────────────────────────────────────────────────
+# ── Syntax highlighting ─────────────────────────────────────────
+
 HIGHLIGHT_KEYWORDS        = ["print", "for", "while", "if", "elif", "else"]
-HIGHLIGHT_COLOR           = "#E8A020"  # amber — control flow
+HIGHLIGHT_COLOR           = "#ffb000"   # hacker amber — control flow
 
 HIGHLIGHT_KEYWORDS_CYAN   = ["def", "class", "return", "import", "from"]
-HIGHLIGHT_COLOR_CYAN      = "#00cccc"  # cyan — structure
+HIGHLIGHT_COLOR_CYAN      = "#5fd7ff"   # softer cyan — structure
 
 HIGHLIGHT_KEYWORDS_STEEL  = ["try", "except"]
-HIGHLIGHT_COLOR_STEEL     = "#7ec8e3"  # steel blue — error handling + operators + decorators
-# NOTE: = and @staticmethod are handled with custom regex in _apply_highlighting
+HIGHLIGHT_COLOR_STEEL     = "#8fd3ff"   # pale blue — operators / error handling
 
-HIGHLIGHT_COLOR_LIME      = "#c8ff00"  # lime — class name (word after 'class')
-# NOTE: class names use a capture-group regex, no keyword list needed
+HIGHLIGHT_COLOR_LIME      = "#c8ff00"   # neon lime — class names
 
-HIGHLIGHT_COLOR_CORAL     = "#ff9955"  # coral — reserved for future keywords
+HIGHLIGHT_COLOR_CORAL     = "#ff9966"   # warm orange — spare keyword group
 
-HIGHLIGHT_COLOR_STRING    = "#ff4444"  # true red — quoted strings (' and ")
+HIGHLIGHT_COLOR_STRING    = "#ff6b6b"   # softer red — strings
 
-HIGHLIGHT_COLOR_COMMENT   = "#aa00ff"  # bright purple — # and // comments
+HIGHLIGHT_COLOR_COMMENT   = "#6a5acd"   # muted violet — comments
 
 VOICES = {
     "joe": {
