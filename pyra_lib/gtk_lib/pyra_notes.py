@@ -177,6 +177,14 @@ textview, textview text {
     font-size: 15px;
 }
 separator { background-color: #1a2a20; }
+#line-numbers {
+    background-color: #05050a;
+    color: #1a4a3a;
+    font-family: monospace;
+    font-size: 15px;
+    padding-right: 6px;
+    border-right: 1px solid #1a2a20;
+}
 .tree-panel {
     background-color: #08080e;
     border-left: 1px solid #1a2a20;
@@ -281,7 +289,8 @@ class PyraNotesWindow(Gtk.Window):
         for label, cb in [
             ("NEW",          self.on_new),
             ("LOAD",         self.on_load),
-            ("SAVE",         self.on_save),
+            ("SAVE",          self.on_save),
+            ("SAVE AS",       self.on_save_as),
             (None,           None),
             ("DELETE FILE",  self.on_delete),
             (None,           None),
@@ -305,13 +314,35 @@ class PyraNotesWindow(Gtk.Window):
         menu_btn.connect("clicked", self._on_file_menu_clicked)
         file_bar.pack_start(menu_btn, False, False, 0)
 
-        # ── Text editor ──────────────────────────────────────────────────
+        # ── Text editor + line numbers ────────────────────────────────────
+        # Outer scroll contains a horizontal box: [line_nums | editor]
+        # Both share the same vertical adjustment so they scroll in sync.
         scroll = Gtk.ScrolledWindow()
         scroll.set_min_content_height(340)
+        scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+
+        editor_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+
+        # Line number view (read-only, non-interactive)
+        self._line_buf  = Gtk.TextBuffer()
+        self._line_view = Gtk.TextView(buffer=self._line_buf)
+        self._line_view.set_name("line-numbers")
+        self._line_view.set_editable(False)
+        self._line_view.set_cursor_visible(False)
+        self._line_view.set_wrap_mode(Gtk.WrapMode.NONE)
+        self._line_view.set_left_margin(6)
+        self._line_view.set_right_margin(6)
+        self._line_view.set_can_focus(False)
+        editor_box.pack_start(self._line_view, False, False, 0)
+
         self.text_view = Gtk.TextView()
         self.text_view.set_name("editor-view")
         self.text_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+        self.text_view.set_left_margin(6)
         self.text_buffer = self.text_view.get_buffer()
+        editor_box.pack_start(self.text_view, True, True, 0)
+
+        scroll.add(editor_box)
 
         # ── Syntax highlight tags ─────────────────────────────────────────
         self._kw_tag = self.text_buffer.create_tag(
@@ -337,7 +368,12 @@ class PyraNotesWindow(Gtk.Window):
         )
         self.text_buffer.connect("changed", self._on_text_changed)
         self.text_view.connect("key-press-event", self._on_key_press)
-        scroll.add(self.text_view)
+
+        # Keep line numbers scrolled in sync with the editor
+        scroll.get_vadjustment().connect(
+            "value-changed", lambda adj: self._sync_line_scroll(adj)
+        )
+        self._update_line_numbers()
 
         # ── File tree panel ───────────────────────────────────────────────
         self._tree_panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
@@ -356,6 +392,11 @@ class PyraNotesWindow(Gtk.Window):
         btn_pick.get_style_context().add_class("btn-tree")
         btn_pick.connect("clicked", self._on_tree_pick_folder)
         tree_hdr.pack_start(btn_pick, False, False, 0)
+
+        btn_refresh = Gtk.Button(label="⟳")
+        btn_refresh.get_style_context().add_class("btn-tree")
+        btn_refresh.connect("clicked", self._on_tree_refresh)
+        tree_hdr.pack_start(btn_refresh, False, False, 0)
         tree_panel.pack_start(tree_hdr, False, False, 0)
 
         # TreeView
@@ -453,6 +494,7 @@ class PyraNotesWindow(Gtk.Window):
 
     def _on_text_changed(self, buf):
         self._apply_highlighting(buf)
+        self._update_line_numbers()
 
     def _apply_highlighting(self, buf):
         import re
@@ -519,6 +561,28 @@ class PyraNotesWindow(Gtk.Window):
                 buf.get_iter_at_offset(m.start()),
                 buf.get_iter_at_offset(m.end()))
 
+    # ── line numbers ──────────────────────────────────────────────────────
+
+    def _update_line_numbers(self, *_):
+        count = self.text_buffer.get_line_count()
+        # right-align numbers to width of highest line number
+        width  = len(str(count))
+        nums   = "\n".join(str(i).rjust(width) for i in range(1, count + 1))
+        self._line_buf.set_text(nums)
+
+    def _sync_line_scroll(self, *_):
+        """Mirror the editor's vertical scroll position onto the line view."""
+        adj = self.text_view.get_parent().get_parent() if False else None
+        # Use the text_view's own vadjustment via its scrolled window
+        sw = self.text_view.get_parent()  # editor_box
+        if sw:
+            sw2 = sw.get_parent()  # ScrolledWindow
+            if sw2 and isinstance(sw2, Gtk.ScrolledWindow):
+                val = sw2.get_vadjustment().get_value()
+                ladj = self._line_view.get_vadjustment()
+                if ladj:
+                    ladj.set_value(val)
+
     # ── file tree ─────────────────────────────────────────────────────────
 
     def _populate_tree(self, folder):
@@ -555,6 +619,10 @@ class PyraNotesWindow(Gtk.Window):
             else:
                 self._tree_store.append(parent_iter, [entry.name, entry.path])
 
+    def _on_tree_refresh(self, _btn):
+        self._populate_tree(self._tree_folder)
+        self.log(f"▸ Tree refreshed: {self._tree_folder}")
+
     def _on_tree_pick_folder(self, _btn):
         dialog = Gtk.FileChooserDialog(
             title="Choose Folder", parent=self,
@@ -577,6 +645,7 @@ class PyraNotesWindow(Gtk.Window):
                 with open(fpath, "r", encoding="utf-8") as f:
                     self.text_buffer.set_text(f.read())
                 self._apply_highlighting(self.text_buffer)
+                self._update_line_numbers()
                 self.current_file = fpath
                 basename = os.path.basename(fpath)
                 display  = basename[:-4] if basename.endswith(".txt") else basename
@@ -654,7 +723,10 @@ class PyraNotesWindow(Gtk.Window):
 
     def _apply_text_size(self):
         """Push the current text_size into the editor textview only."""
-        css = f"#editor-view, #editor-view text {{ font-size: {self.text_size}px; }}".encode()
+        css = f"""
+#editor-view, #editor-view text {{ font-size: {self.text_size}px; }}
+#line-numbers, #line-numbers text {{ font-size: {self.text_size}px; }}
+""".encode()
         if not hasattr(self, "_size_provider"):
             self._size_provider = Gtk.CssProvider()
             Gtk.StyleContext.add_provider_for_screen(
@@ -832,6 +904,7 @@ class PyraNotesWindow(Gtk.Window):
                 with open(path, "r", encoding="utf-8") as f:
                     self.text_buffer.set_text(f.read())
                 self._apply_highlighting(self.text_buffer)
+                self._update_line_numbers()
                 self.current_file = path
                 basename = os.path.basename(path)
                 # Strip .txt for display; keep .py/.c/.sh/etc. visible
@@ -843,19 +916,50 @@ class PyraNotesWindow(Gtk.Window):
         dialog.destroy()
 
     def on_save(self, _btn):
-        name = self.filename_entry.get_text().strip()
-        if not name:
-            self.log("▸ ERROR: enter a filename first.")
+        # No known file path — open Save As dialog instead
+        if not self.current_file:
+            self.on_save_as(_btn)
             return
-        path = self._resolve_path(name)
         start, end = self.text_buffer.get_bounds()
         try:
-            with open(path, "w", encoding="utf-8") as f:
+            with open(self.current_file, "w", encoding="utf-8") as f:
                 f.write(self.text_buffer.get_text(start, end, True))
-            self.current_file = path
-            self.log(f"▸ Saved: {path}")
+            self.log(f"▸ Saved: {self.current_file}")
         except Exception as e:
             self.log(f"▸ ERROR saving: {e}")
+
+    def on_save_as(self, _btn):
+        dialog = Gtk.FileChooserDialog(
+            title="Save As", parent=self,
+            action=Gtk.FileChooserAction.SAVE,
+        )
+        dialog.add_buttons(
+            Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
+            Gtk.STOCK_SAVE,   Gtk.ResponseType.OK,
+        )
+        dialog.set_do_overwrite_confirmation(True)
+        dialog.set_current_folder(
+            os.path.dirname(self.current_file) if self.current_file else NOTES_DIR
+        )
+        # pre-fill current filename if we have one
+        current_name = self.filename_entry.get_text().strip()
+        if current_name:
+            dialog.set_current_name(current_name if "." in current_name else current_name + ".txt")
+
+        if dialog.run() == Gtk.ResponseType.OK:
+            path  = dialog.get_filename()
+            start, end = self.text_buffer.get_bounds()
+            try:
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(self.text_buffer.get_text(start, end, True))
+                self.current_file = path
+                basename = os.path.basename(path)
+                display  = basename[:-4] if basename.endswith(".txt") else basename
+                self.filename_entry.set_text(display)
+                self.log(f"▸ Saved as: {path}")
+            except Exception as e:
+                self.log(f"▸ ERROR saving: {e}")
+        dialog.destroy()
 
     def on_delete(self, _btn):
         name = self.filename_entry.get_text().strip()
