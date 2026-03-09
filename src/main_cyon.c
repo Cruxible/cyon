@@ -10,7 +10,7 @@
 #include <fcntl.h>
 #include "../include/downloader.h"
 static void ui_log(const char *fmt, ...);
-/* Paths resolved at runtime — supports both AppImage (CYON_HOME) and source install */
+/* Paths resolved at runtime — source install */
 #define CYON_PATH_MAX (PATH_MAX * 2)
 static char BOT_SCRIPT[CYON_PATH_MAX];
 static char LOCAL_BOT_SCRIPT[CYON_PATH_MAX];
@@ -117,7 +117,7 @@ static const gchar *CSS =
     /* Green Start Buttons */
     ".btn-start { background-color: #003322; color: #00ff99; border: 1px solid #00ff99; font-family: monospace; padding: 6px 18px; }"
     
-    /* Your New Amber Stop Buttons */
+    /* Amber Stop Buttons */
     ".btn-stop { background-color: #221100; color: #E8A020; border: 1px solid #E8A020; font-family: monospace; padding: 6px 18px; }"
     ".btn-stop:hover { background-color: #331a00; }"
     
@@ -154,7 +154,6 @@ void launch_pyra(GtkWidget *widget, gpointer data) {
 
     if (!home) { g_print("Could not determine HOME directory.\n"); return; }
 
-    // AppImage: use bundled path via CYON_HOME
     // Source install: fall back to ~/cyon/pyra_tool/pyra_toolz
     if (cyon_home) {
         snprintf(pyra_path, sizeof(pyra_path), "%s/pyra_tool/pyra_toolz", cyon_home);
@@ -207,7 +206,7 @@ void launch_repeater(GtkWidget *widget, gpointer data) {
 
 void open_gtk_convert(GtkWidget *widget, gpointer data)  { LAUNCH_PYLIB("gtk_convert.py"); }
 void create_tarfile(GtkWidget *widget, gpointer data)     { LAUNCH_PYLIB("tarmaker_gtk3.py"); }
-void open_piper_tts(GtkWidget *widget, gpointer data)     { LAUNCH_PYLIB("cyon_tts.py"); }
+void open_pyra_notes(GtkWidget *widget, gpointer data)    { LAUNCH_PYLIB("pyra_notes.py"); }
 void open_pyra_player(GtkWidget *widget, gpointer data)   { LAUNCH_PYLIB("pyra_player.py"); }
 void open_cyon_matrix(GtkWidget *widget, gpointer data)   { LAUNCH_PYLIB("cyon_matrix.py"); }
 void open_cut_video(GtkWidget *widget, gpointer data)     { LAUNCH_PYLIB("cut_video.py"); }
@@ -485,7 +484,7 @@ int main(int argc, char *argv[]) {
     GtkWidget *gtk_tarmaker_item = gtk_menu_item_new_with_label("create tarfile");
 
     /* NEW: Piper TTS right after tarfile */
-    GtkWidget *gtk_piper_tts_item = gtk_menu_item_new_with_label("Cyon TTS");
+    GtkWidget *gtk_piper_tts_item = gtk_menu_item_new_with_label("Pyra Notes/TTS");
 
     GtkWidget *tool_subitem1 = gtk_menu_item_new_with_label("Tool A");
     GtkWidget *tool_subitem2 = gtk_menu_item_new_with_label("Tool B");
@@ -502,7 +501,7 @@ int main(int argc, char *argv[]) {
     /* Connect callbacks */
     g_signal_connect(gtk_convert_item, "activate", G_CALLBACK(open_gtk_convert), NULL);
     g_signal_connect(gtk_tarmaker_item, "activate", G_CALLBACK(create_tarfile), NULL);
-    g_signal_connect(gtk_piper_tts_item, "activate", G_CALLBACK(open_piper_tts), NULL); // <--- added
+    g_signal_connect(gtk_piper_tts_item, "activate", G_CALLBACK(open_pyra_notes), NULL);
     g_signal_connect(tool_subitem1, "activate", G_CALLBACK(tool_a), NULL);
     g_signal_connect(tool_subitem2, "activate", G_CALLBACK(tool_b), NULL);
 
