@@ -7,9 +7,8 @@ Cyon is a hybrid GTK and CLI-based desktop tool built in C. It serves as a contr
 
 ## ✨ Features
 
-- ✅ GTK 3 control panel — manage Ollama, local AI, Discord bot, and tool engine from one window
+- ✅ GTK 3 control panel — manage Ollama, local AI, and Discord bot from one window
 - ✅ Local AI chatbot powered by Ollama + Llama 3 (no cloud, no API key)
-- ✅ Cyon Tools — separate llama.cpp-powered tool engine with real shell, ping, whois, file, and app launch tools
 - ✅ Discord bot integration — relay messages through local Llama 3
 - ✅ MP3/MP4 and file downloading using yt-dlp and curl
 - ✅ Standalone CLI with styled shell prompt
@@ -146,7 +145,6 @@ Then update `cyon_local.py` and `cyon_bot.py` to use `"cyon"` as the model name.
 | File | Purpose |
 |------|---------|
 | `cyon_local.py` | Local AI chatbot — connects to Ollama, handles chat queries only |
-| `cyon_tools.py` | Tool engine — llama.cpp powered, executes real shell commands, ping, whois, file checks, app launches |
 | `cyon_bot.py` | Discord bot — relays messages through Ollama |
 | `cyon_shell.py` | Shell backbone — always running, handles slash commands even when AI is offline |
 
@@ -391,141 +389,6 @@ model = en_US-joe-medium.onnx
 - Tools are launched via `python3` calls from `main_cyon.c` and run as background processes
 
 ---
-
-
----
-
-## 🦙 llama.cpp — cyon_tools.py
-
-Cyon Tools (`cyon_tools.py`) uses `llama-cpp-python` to run a local GGUF model directly — no Ollama server required. It is a completely separate process from `cyon_local.py` and is managed by its own **CYON TOOLS** row in the GTK control panel.
-
-`cyon_local.py` uses **Ollama only** for chat. `cyon_tools.py` uses **llama.cpp** for tool execution. They run independently and can both be active at the same time.
-
-### Step 1 — Install llama-cpp-python
-
-Install into your existing `pyra_env`:
-```bash
-/home/cruxible/pyra_env/bin/pip install llama-cpp-python
-```
-
-> ⚠️ If you compiled llama.cpp manually with GPU support, see the [llama-cpp-python docs](https://github.com/abetlen/llama-cpp-python) for the correct install flags.
-
-### Step 2 — Download a GGUF Model
-
-Modern llama.cpp requires **GGUF format** models. The old `.bin` format is not supported.
-
-```bash
-# Install huggingface-hub into pyra_env
-/home/cruxible/pyra_env/bin/pip install huggingface-hub
-
-# Download Llama 3 8B (recommended — ~4.7GB)
-/home/cruxible/pyra_env/bin/python -c "
-from huggingface_hub import hf_hub_download
-hf_hub_download(
-    repo_id='bartowski/Meta-Llama-3-8B-Instruct-GGUF',
-    filename='Meta-Llama-3-8B-Instruct-Q4_K_M.gguf',
-    local_dir='/home/cruxible/cyon/llama3_models/'
-)
-print('Download complete!')
-"
-```
-
-| Model | Size | RAM Needed | Quality |
-|-------|------|-----------|---------|
-| `Meta-Llama-3-8B-Instruct-Q4_K_M.gguf` | ~4.7GB | ~6GB | ✅ Recommended |
-| `Meta-Llama-3-8B-Instruct-Q3_K_S.gguf` | ~3.4GB | ~4GB | Lower quality |
-
-### Step 3 — Update cyon_tools.py
-
-Set the model path at the top of `cyon_tools.py`:
-```python
-LLAMA_MODEL_PATH = "/home/cruxible/cyon/llama3_models/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf"
-```
-
-### Step 4 — Verify
-
-Start Cyon and check the output:
-```
-[LOCAL] Loading model, please wait...
-[LOCAL] Model loaded OK.
-```
-
-If the model fails to load, Cyon will print a clear error and **continue running** — all slash commands still work without the AI.
-
----
-
-## 🔧 cyon_tools.py — Tool Engine
-
-`cyon_tools.py` is a standalone tool engine that gives Cyon the ability to run real commands on your system in response to natural language. It runs as a separate process from `cyon_local.py` and is managed by the **CYON TOOLS** START/STOP row in the GTK window.
-
-### How It Works
-
-When you type a message, Cyon passes it to the local LLM. If the model determines a tool is needed, it responds with a `TOOL:` line in this exact format:
-
-```
-TOOL: tool_name argument
-```
-
-`cyon_local.py` intercepts that line, runs the tool, and includes the result in the response.
-
-### Built-in Tools
-
-| Tool | Usage | Description |
-|------|-------|-------------|
-| `shell` | `TOOL: shell <command>` | Run any bash command and return output |
-| `file_check` | `TOOL: file_check <path>` | Check if a file exists and get its size |
-| `ping` | `TOOL: ping <host>` | Ping a host or IP address |
-| `whois` | `TOOL: whois <domain>` | Look up domain registration info |
-| `launch` | `TOOL: launch <app>` | Launch an app in a new terminal window |
-
-### Launch Tool — Supported Apps
-
-| App Name | Launches |
-|----------|----------|
-| `pyra_toolz` or `pyra` | `~/cyon/pyra_tool/pyra_toolz` |
-| `cyon_cli` | `~/cyon/bin/cyon_cli` |
-
-### Example Prompts
-
-```
-what processes are running on my system
-how much disk space do i have left
-check if the file ~/cyon/cyon_local.py exists
-ping google.com
-run pyra_toolz
-```
-
-### Adding Your Own Tools
-
-Open `cyon_local.py` and add a function to the `TOOLS` dict:
-
-```python
-def tool_mycommand(arg):
-    import subprocess
-    result = subprocess.check_output(["my_command", arg], timeout=10)
-    return result.decode("utf-8")[:500]
-
-TOOLS = {
-    ...
-    "mycommand": tool_mycommand,
-}
-```
-
-Then tell Cyon about it by adding an example to the `SYSTEM_PROMPT`.
-
-### Slash Commands (always available even without AI)
-
-These work whether or not the LLM is loaded:
-
-| Command | Description |
-|---------|-------------|
-| `/shutdown` | Shut down the PC |
-| `/bye` | Exit Cyon gracefully |
-| `/clear` | Clear conversation history |
-| `/pyra` | Launch pyra_toolz in a new terminal |
-| `/cyon_cli` | Launch Cyon CLI in a new terminal |
-| `/term` | Open a new terminal window |
-| `/status` | Show model load status and history length |
 
 ## 🗑️ Uninstalling
 
