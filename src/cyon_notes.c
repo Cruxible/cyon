@@ -27,7 +27,7 @@ static GtkTextTagTable *g_shared_tags = NULL;
 /* ── constants ──────────────────────────────────────────────────────────── */
 
 #define APP_TITLE       "▸ CYON NOTES // TTS"
-#define NOTES_DIR_NAME  "Documents/pyra_dev_notes"
+#define NOTES_DIR_NAME  "/cyon"
 #define LOCK_FILE       "/tmp/cyon_notes.lock"
 #define MAX_UNDO        300
 #define CONFIG_FILENAME "cyon_notes.conf"
@@ -43,7 +43,7 @@ static const char *APP_CSS =
 "}"
 ".title-label {"
 "  font-family: monospace;"
-"  font-size: 13px;"
+"  font-size: 15px;"
 "  font-weight: bold;"
 "  color: #00ff99;"
 "  letter-spacing: 2px;"
@@ -73,7 +73,7 @@ static const char *APP_CSS =
 "  background-color: #0d0d15;"
 "  color: #336655;"
 "  font-family: monospace;"
-"  font-size: 11px;"
+"  font-size: 16px;"
 "  padding: 4px 8px;"
 "  border: 1px solid #1a2a20;"
 "  border-bottom: none;"
@@ -117,7 +117,7 @@ static const char *APP_CSS =
 "  background-color: #030308;"
 "  color: #00cc66;"
 "  font-family: monospace;"
-"  font-size: 10px;"
+"  font-size: 20px;"
 "}"
 ".tab-close-btn {"
 "  padding: 0 2px;"
@@ -150,7 +150,7 @@ static const char *APP_CSS =
     "  font-size: 13px;"
     "  border: 1px solid #2a4a38;"
     "  border-radius: 3px;"
-    "  padding: 4px 10px;"
+    "  padding: 7px 12px;"
     "  min-width: 0;"
     "}"
     ".btn-tree:hover { color: #00ff99; border-color: #E8A020; }"
@@ -159,7 +159,7 @@ static const char *APP_CSS =
     "  background-color: #080810;"
     "  color: #00cc77;"
     "  font-family: monospace;"
-    "  font-size: 11px;"
+    "  font-size: 14px;"
     "}"
 
     "#tree-view:selected {"
@@ -444,7 +444,6 @@ static void on_text_changed(GtkTextBuffer *buf, EditorTab *tab) {
 }
 
 /* ── tab_load_file ──────────────────────────────────────────────────────── */
-
 static void tab_load_file(EditorTab *tab, const char *path) {
     gchar *content = NULL;
     gsize  length  = 0;
@@ -455,6 +454,10 @@ static void tab_load_file(EditorTab *tab, const char *path) {
         g_error_free(err);
         return;
     }
+
+    /* save scroll position */
+    GtkAdjustment *vadj = gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(tab->scroll));
+    gdouble scroll_pos = gtk_adjustment_get_value(vadj);
 
     tab->undo_inhibit = TRUE;
     gtk_text_buffer_set_text(tab->text_buf, content, -1);
@@ -479,6 +482,12 @@ static void tab_load_file(EditorTab *tab, const char *path) {
     tab_update_line_numbers(tab);
     tab_update_label(tab);
     app_log(tab->app, "▸ Loaded: %s", path);
+
+    /* restore scroll asynchronously to avoid jump */
+    g_idle_add((GSourceFunc) (void*) ({
+        gtk_adjustment_set_value(vadj, scroll_pos);
+        NULL;
+    }), NULL);
 }
 
 /* ── confirm close (unsaved changes dialog) ─────────────────────────────── */
@@ -611,8 +620,17 @@ static EditorTab *tab_new(AppState *app, const char *path) {
     g_signal_connect(close_btn, "clicked",
         G_CALLBACK(on_tab_close_clicked), tab->scroll);
 
-    if (path)
-        tab_load_file(tab, path);
+    /* ── load file and preserve scroll ── */
+    if (path) {
+        /* save current scroll */
+        GtkAdjustment *scroll_adj = gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(tab->scroll));
+        gdouble scroll_val = gtk_adjustment_get_value(scroll_adj);
+
+        tab_load_file(tab, path);  /* your existing file loader */
+
+        /* restore scroll */
+        gtk_adjustment_set_value(scroll_adj, scroll_val);
+    }
 
     gtk_notebook_set_current_page(GTK_NOTEBOOK(app->notebook), page_idx);
     gtk_widget_show_all(app->notebook);
@@ -1458,72 +1476,16 @@ static void hl_apply(AppState *app, GtkTextBuffer *buf) {
 
     char *text = gtk_text_buffer_get_text(buf, &s, &e, FALSE);
 
-    /* 1) keyword groups — lowest priority */
-    for (int i = 0; i < app->hl_group_count; i++)
-        hl_apply_regex(buf, app->hl_kw_regex[i], app->hl_kw_tags[i], text, 1);
-
-    /* 2) steel: standalone = operator */
-    {
-        static GRegex *re_eq = NULL;
-        if (!re_eq) re_eq = g_regex_new("(?<![=!<>])=(?!=)", G_REGEX_OPTIMIZE, 0, NULL);
-        hl_apply_regex(buf, re_eq, app->hl_tag_steel, text, 0);
-    }
-
-    /* 3) steel: @staticmethod */
-    {
-        static GRegex *re_sm = NULL;
-        if (!re_sm) re_sm = g_regex_new("@staticmethod(?!\\w)", G_REGEX_OPTIMIZE, 0, NULL);
-        hl_apply_regex(buf, re_sm, app->hl_tag_steel, text, 0);
-    }
-
-    /* 4) lime: class name after 'class' */
-    {
-        static GRegex *re_cls = NULL;
-        if (!re_cls) re_cls = g_regex_new("(?<!\\w)class\\s+(\\w+)", G_REGEX_OPTIMIZE, 0, NULL);
-        hl_apply_regex(buf, re_cls, app->hl_tag_lime, text, 1);
-    }
-
-    /* 5) dot notation: obj.method */
-    {
-        static GRegex *re_dot = NULL;
-        if (!re_dot) re_dot = g_regex_new("(?<!\\w)(\\w+)\\.(\\w+)(?!\\w)", G_REGEX_OPTIMIZE, 0, NULL);
-        GMatchInfo *mi = NULL;
-        g_regex_match(re_dot, text, 0, &mi);
-        while (g_match_info_matches(mi)) {
-            gint ls, le, rs, re2;
-            g_match_info_fetch_pos(mi, 1, &ls, &le);
-            g_match_info_fetch_pos(mi, 2, &rs, &re2);
-
-            if (ls >= 0) {
-                GtkTextIter a, b;
-                glong cls = g_utf8_pointer_to_offset(text, text + ls);
-                glong cle = g_utf8_pointer_to_offset(text, text + le);
-                gtk_text_buffer_get_iter_at_offset(buf, &a, (gint)cls);
-                gtk_text_buffer_get_iter_at_offset(buf, &b, (gint)cle);
-                gtk_text_buffer_apply_tag(buf, app->hl_tag_dot_l, &a, &b);
-            }
-            if (rs >= 0) {
-                GtkTextIter a, b;
-                glong crs = g_utf8_pointer_to_offset(text, text + rs);
-                glong cre = g_utf8_pointer_to_offset(text, text + re2);
-                gtk_text_buffer_get_iter_at_offset(buf, &a, (gint)crs);
-                gtk_text_buffer_get_iter_at_offset(buf, &b, (gint)cre);
-                gtk_text_buffer_apply_tag(buf, app->hl_tag_dot_r, &a, &b);
-            }
-            g_match_info_next(mi, NULL);
-        }
-        g_match_info_free(mi);
-    }
-
-    /* 6) strings — high priority, paint over keywords but under comments */
+    /* 1) strings — high contrast, paint first */
     {
         static GRegex *re_str = NULL;
-        if (!re_str) re_str = g_regex_new("(['\"])(.*?)\\1", G_REGEX_OPTIMIZE|G_REGEX_DOTALL, 0, NULL);
+        if (!re_str) re_str = g_regex_new("(['\"])((?:\\\\.|[^\\\\'\"\\n])*)\\1",
+                                          G_REGEX_OPTIMIZE, 0, NULL);
         GMatchInfo *mi = NULL;
         g_regex_match(re_str, text, 0, &mi);
         while (g_match_info_matches(mi)) {
             gint cs, ce;
-            g_match_info_fetch_pos(mi, 2, &cs, &ce);
+            g_match_info_fetch_pos(mi, 2, &cs, &ce);  // only the inner string
             if (cs >= 0 && ce > cs) {
                 GtkTextIter si, ei;
                 glong ccs = g_utf8_pointer_to_offset(text, text + cs);
@@ -1532,6 +1494,64 @@ static void hl_apply(AppState *app, GtkTextBuffer *buf) {
                 gtk_text_buffer_get_iter_at_offset(buf, &ei, (gint)cce);
                 gtk_text_buffer_apply_tag(buf, app->hl_tag_coral, &si, &ei);
             }
+            g_match_info_next(mi, NULL);
+        }
+        g_match_info_free(mi);
+    }
+
+    /* 2) keyword groups — lowest priority */
+    for (int i = 0; i < app->hl_group_count; i++)
+        hl_apply_regex(buf, app->hl_kw_regex[i], app->hl_kw_tags[i], text, 1);
+
+    /* 3) steel: standalone = operator */
+    {
+        static GRegex *re_eq = NULL;
+        if (!re_eq) re_eq = g_regex_new("(?<![=!<>])=(?!=)", G_REGEX_OPTIMIZE, 0, NULL);
+        hl_apply_regex(buf, re_eq, app->hl_tag_steel, text, 0);
+    }
+
+    /* 4) steel: @staticmethod */
+    {
+        static GRegex *re_sm = NULL;
+        if (!re_sm) re_sm = g_regex_new("@staticmethod(?!\\w)", G_REGEX_OPTIMIZE, 0, NULL);
+        hl_apply_regex(buf, re_sm, app->hl_tag_steel, text, 0);
+    }
+
+    /* 5) lime: class name after 'class' */
+    {
+        static GRegex *re_cls = NULL;
+        if (!re_cls) re_cls = g_regex_new("(?<!\\w)class\\s+(\\w+)", G_REGEX_OPTIMIZE, 0, NULL);
+        hl_apply_regex(buf, re_cls, app->hl_tag_lime, text, 1);
+    }
+
+    /* 6) dot notation: obj.method — strict word boundaries */
+    {
+        static GRegex *re_dot = NULL;
+        if (!re_dot) re_dot = g_regex_new("\\b(\\w+)\\.(\\w+)\\b", G_REGEX_OPTIMIZE, 0, NULL);
+        GMatchInfo *mi = NULL;
+        g_regex_match(re_dot, text, 0, &mi);
+        while (g_match_info_matches(mi)) {
+            gint ls, le, rs, re2;
+            g_match_info_fetch_pos(mi, 1, &ls, &le);
+            g_match_info_fetch_pos(mi, 2, &rs, &re2);
+
+            if (ls >= 0 && le > ls) {
+                GtkTextIter a, b;
+                glong cls = g_utf8_pointer_to_offset(text, text + ls);
+                glong cle = g_utf8_pointer_to_offset(text, text + le);
+                gtk_text_buffer_get_iter_at_offset(buf, &a, (gint)cls);
+                gtk_text_buffer_get_iter_at_offset(buf, &b, (gint)cle);
+                gtk_text_buffer_apply_tag(buf, app->hl_tag_dot_l, &a, &b);
+            }
+            if (rs >= 0 && re2 > rs) {
+                GtkTextIter a, b;
+                glong crs = g_utf8_pointer_to_offset(text, text + rs);
+                glong cre = g_utf8_pointer_to_offset(text, text + re2);
+                gtk_text_buffer_get_iter_at_offset(buf, &a, (gint)crs);
+                gtk_text_buffer_get_iter_at_offset(buf, &b, (gint)cre);
+                gtk_text_buffer_apply_tag(buf, app->hl_tag_dot_r, &a, &b);
+            }
+
             g_match_info_next(mi, NULL);
         }
         g_match_info_free(mi);
