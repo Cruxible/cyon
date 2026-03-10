@@ -32,14 +32,12 @@ HIGHLIGHT_COLOR           = "#ffb000"   # hacker amber — control flow
 HIGHLIGHT_KEYWORDS_CYAN   = ["def", "class", "return", "import", "from"]
 HIGHLIGHT_COLOR_CYAN      = "#5fd7ff"   # softer cyan — structure
 
-HIGHLIGHT_KEYWORDS_STEEL  = ["try", "except"]
+HIGHLIGHT_KEYWORDS_STEEL  = ["try", "except", "self"]
 HIGHLIGHT_COLOR_STEEL     = "#8fd3ff"   # pale blue — operators / error handling
 
 HIGHLIGHT_COLOR_LIME      = "#c8ff00"   # neon lime — class names
 
 HIGHLIGHT_COLOR_CORAL     = "#ff9966"   # warm orange — spare keyword group
-
-HIGHLIGHT_COLOR_STRING    = "#ff6b6b"   # softer red — strings
 
 HIGHLIGHT_COLOR_COMMENT   = "#6a5acd"   # muted violet — comments
 
@@ -286,17 +284,17 @@ class PyraNotesWindow(Gtk.Window):
         self._file_menu = Gtk.Menu()
 
         for label, cb in [
-            ("NEW",          self.on_new),
-            ("LOAD",         self.on_load),
-            ("SAVE",          self.on_save),
-            ("SAVE AS",       self.on_save_as),
-            (None,           None),
-            ("DELETE FILE",  self.on_delete),
-            (None,           None),
-            ("TEXT  +",      self.on_text_size_increase),
-            ("TEXT  −",      self.on_text_size_decrease),
-            (None,           None),
-            ("HIDE TREE",    self._on_tree_toggle),
+            ("NEW", self.on_new),
+            ("LOAD", self.on_load),
+            ("SAVE", self.on_save),
+            ("SAVE AS", self.on_save_as),
+            (None, None),
+            ("DELETE FILE", self.on_delete),
+            (None, None),
+            ("TEXT  +", self.on_text_size_increase),
+            ("TEXT  −", self.on_text_size_decrease),
+            (None, None),
+            ("HIDE TREE", self._on_tree_toggle),
         ]:
             if label is None:
                 self._file_menu.append(Gtk.SeparatorMenuItem())
@@ -358,9 +356,6 @@ class PyraNotesWindow(Gtk.Window):
         )
         self._kw_tag_coral = self.text_buffer.create_tag(
             "keyword_coral", foreground=HIGHLIGHT_COLOR_CORAL
-        )
-        self._kw_tag_string = self.text_buffer.create_tag(
-            "string", foreground=HIGHLIGHT_COLOR_STRING
         )
         self._kw_tag_comment = self.text_buffer.create_tag(
             "comment", foreground=HIGHLIGHT_COLOR_COMMENT
@@ -503,7 +498,6 @@ class PyraNotesWindow(Gtk.Window):
         buf.remove_tag(self._kw_tag_steel, start, end)
         buf.remove_tag(self._kw_tag_lime,  start, end)
         buf.remove_tag(self._kw_tag_coral, start, end)
-        buf.remove_tag(self._kw_tag_string, start, end)
         buf.remove_tag(self._kw_tag_comment, start, end)
         text = buf.get_text(start, end, True)
 
@@ -545,13 +539,6 @@ class PyraNotesWindow(Gtk.Window):
             buf.apply_tag(self._kw_tag_lime,
                 buf.get_iter_at_offset(m.start(1)),
                 buf.get_iter_at_offset(m.end(1)))
-
-        # true red — single and double quoted strings (including the quotes)
-        # handles both 'single' and "double", skips triple-quoted for simplicity
-        for m in re.finditer(r'("(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\')', text):
-            buf.apply_tag(self._kw_tag_string,
-                buf.get_iter_at_offset(m.start()),
-                buf.get_iter_at_offset(m.end()))
 
         # bright purple — # comments (Python/bash) and // comments (C)
         # matches from # or // to end of line; painted last to override everything
