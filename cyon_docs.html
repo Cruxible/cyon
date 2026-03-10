@@ -439,7 +439,7 @@ footer {
   <a href="#commands">CLI Commands</a>
   <a href="#pyra-lib">pyra_lib Tools</a>
   <a href="#gtk-lib">gtk_lib Tools</a>
-  <a href="#pyra-notes">Pyra Notes / TTS</a>
+  <a href="#pyra-notes">cyon_notes Editor</a>
 
   <span class="nav-section">MANAGE</span>
   <a href="#compile-menu">compile_cyon Menu</a>
@@ -863,46 +863,104 @@ You are running inside the Cyon desktop application on the user's machine.
     </div>
   </section>
 
-  <!-- PYRA NOTES -->
+  <!-- CYON NOTES -->
   <section id="pyra-notes">
-    <h2>Pyra Notes / TTS</h2>
-    <p>A combined GTK notes editor and Piper text-to-speech tool. Lives at <code>~/cyon/pyra_lib/gtk_lib/pyra_notes.py</code>. Notes are stored in <code>~/Documents/pyra_dev_notes</code>.</p>
+    <h2>cyon_notes — Standalone Notes Editor</h2>
+    <p>A standalone GTK3 notes editor written in C. Compiled to <code>bin/cyon_notes</code> and run independently of the main Cyon desktop. Config and session state live in <code>cyon_notes.conf</code> next to the binary.</p>
+
+    <h3>Features</h3>
+    <table>
+      <tr><th>Feature</th><th>Details</th></tr>
+      <tr><td>Multi-tab editing</td><td>Open multiple files at once. Tabs show <code>*</code> when unsaved.</td></tr>
+      <tr><td>File tree panel</td><td>Browse and open files from a folder. Live file monitor refreshes on changes.</td></tr>
+      <tr><td>Session restore</td><td>Saves open files, active tab, window size, pane position, and font size on exit. Restores everything on next launch.</td></tr>
+      <tr><td>Syntax highlighting</td><td>14 keyword color groups + string / comment / operator rules, all defined in <code>cyon_notes.conf</code>. Reload with FILE → RELOAD CONF.</td></tr>
+      <tr><td>Smart indent</td><td>Enter after <code>if / def / class / for / while / {</code> auto-indents the next line.</td></tr>
+      <tr><td>Auto-close pairs</td><td><code>( [ { ' "</code> close automatically. Backspace removes the pair.</td></tr>
+      <tr><td>TTS</td><td>Speak selected text or full file via Piper (joe / lessac). Paths set in conf.</td></tr>
+      <tr><td>Font size</td><td>FILE → TEXT + / TEXT − adjusts editor size 8–36 px. Saved on exit.</td></tr>
+      <tr><td>Single-instance lock</td><td>Only one <code>cyon_notes</code> runs at a time.</td></tr>
+    </table>
 
     <h3>FILE Menu</h3>
-    <p>A single <strong>FILE</strong> button replaces the old row of individual buttons. It drops down with:</p>
     <table>
       <tr><th>Item</th><th>What It Does</th></tr>
-      <tr><td>NEW</td><td>Clears the editor and resets the filename field</td></tr>
-      <tr><td>LOAD</td><td>Opens a file dialog — supports <code>.txt</code>, <code>.py</code>, <code>.c</code>, <code>.h</code>, <code>.sh</code>, extensionless bash/executables, and all files</td></tr>
-      <tr><td>SAVE</td><td>Saves to the current path. Auto-appends <code>.txt</code> only for brand-new names with no extension. Existing extensions are preserved.</td></tr>
-      <tr><td>DELETE FILE</td><td>Deletes the open file after a confirmation dialog</td></tr>
-      <tr><td>TEXT +</td><td>Increase editor font size by 2px (max 36px)</td></tr>
-      <tr><td>TEXT −</td><td>Decrease editor font size by 2px (min 8px)</td></tr>
+      <tr><td>NEW</td><td>Opens a blank tab</td></tr>
+      <tr><td>LOAD</td><td>File dialog — supports <code>.txt .py .c .h .sh</code>, extensionless bash/executables, and all files</td></tr>
+      <tr><td>SAVE</td><td>Save current file. Auto-appends <code>.txt</code> for new names with no extension.</td></tr>
+      <tr><td>SAVE AS</td><td>Save to a new path</td></tr>
+      <tr><td>DELETE FILE</td><td>Delete the open file after confirmation</td></tr>
+      <tr><td>TEXT +</td><td>Increase editor font size by 2 px (max 36 px)</td></tr>
+      <tr><td>TEXT −</td><td>Decrease editor font size by 2 px (min 8 px)</td></tr>
+      <tr><td>RELOAD CONF</td><td>Reload <code>cyon_notes.conf</code> without restarting — picks up highlighting changes live</td></tr>
     </table>
 
-    <div class="info">
-      <strong>// TEXT SIZE</strong>
-      TEXT + / TEXT − only affect the main editor view. The log terminal at the bottom is fixed size and unaffected.
-    </div>
+    <h3>cyon_notes.conf</h3>
+    <p>Created automatically next to the binary on first run. All values are saved on exit — you only need to edit the <code>[tts]</code> paths once to match your Piper install.</p>
+
+    <div class="code-block"><button class="copy-btn" onclick="cp(this)">COPY</button><span class="c"># Session — auto-saved on exit</span>
+<span class="cy">[session]</span>
+<span class="am">notes_dir</span>   = ~/cyon          <span class="c"># starting folder for file tree</span>
+<span class="am">open_files</span>  =                 <span class="c"># last open files (auto-populated)</span>
+<span class="am">active_tab</span>  = 0
+
+<span class="c"># Editor — auto-saved on exit</span>
+<span class="cy">[editor]</span>
+<span class="am">font_size</span>          = 15
+<span class="am">tree_hidden</span>        = false
+<span class="am">tree_pane_position</span> = 600
+<span class="am">window_width</span>       = 900
+<span class="am">window_height</span>      = 660
+
+<span class="c"># TTS — edit these once to match your Piper install</span>
+<span class="cy">[tts]</span>
+<span class="am">piper_path</span>         = /home/cruxible/pyra_env/bin/piper
+<span class="am">model_dir</span>          = /home/cruxible/cyon/piper_models
+<span class="am">voice_joe_model</span>    = en_US-joe-medium.onnx
+<span class="am">voice_lessac_model</span> = en_US-lessac-medium.onnx
+<span class="am">voice</span>              = joe
+
+<span class="c"># Syntax highlighting — up to 99 groups</span>
+<span class="cy">[highlight_group_1]</span>
+<span class="am">keywords</span> = for while if elif else ...
+<span class="am">color</span>    = #ffb000
+
+<span class="cy">[highlight_special]</span>           <span class="c"># strings, comments, = operator, dot notation</span>
+<span class="am">color_lime</span>    = #c8ff00
+<span class="am">color_coral</span>   = #ff9966
+<span class="am">color_comment</span> = #6a5acd
+...</div>
 
     <h3>Syntax Highlighting</h3>
-    <p>Keywords are highlighted live as you type. Each color group is a pair of constants at the top of <code>pyra_notes.py</code> — easy to add new words or colors:</p>
+    <p>All groups are defined in <code>cyon_notes.conf</code>. Add a new <code>[highlight_group_N]</code> section with <code>keywords</code> and <code>color</code> — no code changes needed. Use FILE → RELOAD CONF to apply changes live.</p>
     <table>
-      <tr><th>Color</th><th>Hex</th><th>Keywords / Pattern</th></tr>
-      <tr><td style="color:#E8A020">Amber</td><td><code>#E8A020</code></td><td>print, for, while, if, elif, else</td></tr>
-      <tr><td style="color:#00cccc">Cyan</td><td><code>#00cccc</code></td><td>def, class, return, import, from</td></tr>
-      <tr><td style="color:#7ec8e3">Steel blue</td><td><code>#7ec8e3</code></td><td>try, except, <code>=</code> operator, <code>@staticmethod</code></td></tr>
-      <tr><td style="color:#c8ff00">Lime</td><td><code>#c8ff00</code></td><td>Class name — identifier immediately after <code>class</code></td></tr>
-      <tr><td style="color:#ff9955">Coral</td><td><code>#ff9955</code></td><td>Reserved — add words to <code>HIGHLIGHT_KEYWORDS_CORAL</code></td></tr>
+      <tr><th>Group</th><th>Color</th><th>Contents</th></tr>
+      <tr><td>1</td><td style="color:#ffb000">#ffb000</td><td>Control flow — for while if elif else return...</td></tr>
+      <tr><td>2</td><td style="color:#5fd7ff">#5fd7ff</td><td>def class import from as lambda...</td></tr>
+      <tr><td>3</td><td style="color:#8fd3ff">#8fd3ff</td><td>try except finally self super</td></tr>
+      <tr><td>4</td><td style="color:#ff4444">#ff4444</td><td>True False None NULL nullptr true false...</td></tr>
+      <tr><td>5</td><td style="color:#ff88ff">#ff88ff</td><td>CSS — display position margin padding...</td></tr>
+      <tr><td>6</td><td style="color:#00ffaa">#00ffaa</td><td>Python builtins — len range open map...</td></tr>
+      <tr><td>7</td><td style="color:#8fd3ff">#8fd3ff</td><td>GTK types — GtkWidget GtkWindow gboolean...</td></tr>
+      <tr><td>8</td><td style="color:#5fd7ff">#5fd7ff</td><td>Path/list helpers — expanduser join append...</td></tr>
+      <tr><td>9</td><td style="color:#ffd700">#ffd700</td><td>and or not in is</td></tr>
+      <tr><td>10</td><td style="color:#00eaff">#00eaff</td><td>os sys subprocess pathlib cd ls git...</td></tr>
+      <tr><td>11</td><td style="color:#ff5555">#ff5555</td><td>eval exec malloc free calloc goto...</td></tr>
+      <tr><td>12</td><td style="color:#c792ea">#c792ea</td><td>__name__ __file__ __init__ __main__...</td></tr>
+      <tr><td>13</td><td style="color:#8fd3ff">#8fd3ff</td><td>C types — void static const struct enum typedef...</td></tr>
+      <tr><td>14</td><td style="color:#ffb347">#ffb347</td><td>C preprocessor — include define ifdef pragma...</td></tr>
+      <tr><td>special</td><td style="color:#c8ff00">#c8ff00 / #ff9966 / #6a5acd</td><td>Strings (coral), comments (purple), class names (lime), <code>=</code> operator (steel), dot notation</td></tr>
     </table>
 
-    <div class="amber-box">
-      <strong>// ADDING A NEW COLOR GROUP</strong>
-      Add a <code>HIGHLIGHT_KEYWORDS_FOO = [...]</code> and <code>HIGHLIGHT_COLOR_FOO = "#rrggbb"</code> constant at the top of the file, create a tag for it in <code>__init__</code>, and add a sweep for it in <code>_apply_highlighting</code>. Each group is self-contained.
-    </div>
-
     <h3>TTS</h3>
-    <p>The TTS row lets you speak selected text or the full note using either the <strong>JOE ♂</strong> or <strong>LESSAC ♀</strong> Piper voice. Piper and a voice model must both be installed — run <code>compile_cyon</code> option 2 to set this up automatically.</p>
+    <p>Select text and click <strong>[SELECTION]</strong>, or click <strong>[ALL]</strong> to speak the full file. Toggle between <strong>JOE ♂</strong> and <strong>LESSAC ♀</strong> voices. Click <strong>[STOP]</strong> to silence. All paths are set in <code>cyon_notes.conf</code> under <code>[tts]</code> — run <code>compile_cyon</code> option 2 to install Piper automatically.</p>
+
+    <div class="info">
+      <strong>// BUILDING cyon_notes</strong>
+      Use <code>compile_cyon</code> option 10, or manually:<br>
+      <code>gcc $(pkg-config --cflags gtk+-3.0) -o bin/cyon_notes src/cyon_notes.c $(pkg-config --libs gtk+-3.0) -lpthread</code><br>
+      Copy <code>cyon_notes.conf</code> to the same directory as the binary.
+    </div>
   </section>
 
   <!-- COMPILE MENU -->
@@ -919,6 +977,7 @@ You are running inside the Cyon desktop application on the user's machine.
       <tr><td>7</td><td>Setup Piper voices only — download voice models to ~/cyon/piper_models/</td></tr>
       <tr><td>8</td><td>Remove Pyra PATH block from ~/.bashrc</td></tr>
       <tr><td>9</td><td>Uninstall Cyon (see below)</td></tr>
+      <tr><td>10</td><td>Compile <code>cyon_notes</code> standalone notes editor — outputs to <code>bin/cyon_notes</code>, copies <code>cyon_notes.conf</code> alongside it</td></tr>
       <tr><td>0</td><td>Exit</td></tr>
     </table>
   </section>

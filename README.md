@@ -169,6 +169,7 @@ chmod +x compile_cyon
 | 5 | Compile all (runs 1 + 2 + 3 + 4 in sequence) |
 | 6 | Add ~/cyon/bin and ~/cyon/pyra_tool to PATH in ~/.bashrc |
 | 7 | Setup Piper voices only (download voice models to ~/cyon/piper_models/) |
+| 10 | Compile cyon_notes standalone notes editor binary |
 | 8 | Remove Pyra PATH from ~/.bashrc |
 | 9 | Uninstall Cyon |
 | 0 | Exit |
@@ -177,6 +178,9 @@ chmod +x compile_cyon
 ```bash
 # GTK desktop app
 gcc -Iinclude src/*.c -o bin/main_cyon `pkg-config --cflags --libs gtk+-3.0` -lpthread
+
+# cyon_notes standalone notes editor
+gcc $(pkg-config --cflags gtk+-3.0) -o bin/cyon_notes src/cyon_notes.c $(pkg-config --libs gtk+-3.0) -lpthread
 
 # CLI shell
 gcc -Iinclude cli/cyon_cli.c -o bin/cyon_cli
@@ -244,7 +248,7 @@ These slash-commands are handled by `cyon_shell.py` and work from the input fiel
 | Tools → Editor Tools → Stitch Audio | Concatenate two audio files into one |
 | Tools → Convert Pics | GTK image format converter |
 | Tools → Create Tarfile | GTK tarball creator and encryptor |
-| Tools → Pyra Notes/TTS | GTK notes editor + Piper TTS — FILE dropdown menu (New, Load, Save, Delete, Text +/−), opens .txt/.py/.c/.sh and extensionless files, syntax highlighting, adjustable text size, JOE ♂ / LESSAC ♀ voice toggle |
+| Tools → Pyra Notes/TTS | **cyon_notes** — standalone GTK notes editor (C binary). Multi-tab editing, file tree panel, syntax highlighting via `cyon_notes.conf`, session restore (open files, active tab, window size), configurable TTS paths, adjustable font size, JOE ♂ / LESSAC ♀ voice toggle, single-instance lock |
 | Security → Defense → Watcher | Toggle filesystem watcher |
 | Security → Defense → Firewall | Firewall controls |
 | Security → Offense → Port Scanner | Network port scanner |
@@ -307,86 +311,71 @@ deactivate
 | `concat_aud.py` | Stitch two audio files together → MP3 |
 | `gtk_convert.py` | GTK image format converter |
 | `tarmaker_gtk3.py` | GTK tarball creator and encryptor |
-| `pyra_notes.py` | GTK notes editor + Piper TTS — write/save/load/delete notes, open `.txt` `.py` `.c` `.sh` and extensionless bash/executable files, speak selection or full text, JOE ♂ / LESSAC ♀ voice toggle, syntax highlighting (amber/cyan/steel-blue/lime/coral), adjustable editor text size |
+| `cyon_notes` (C binary) | Standalone GTK notes editor — multi-tab, file tree, session restore, syntax highlighting via `cyon_notes.conf` (14 keyword groups + special rules), TTS via Piper (joe/lessac), all paths/settings in conf, single-instance lock |
 | `pyra_player.py` | GTK media player |
 | `pyra_downloader.py` | GTK YouTube/audio/video downloader via yt-dlp (standalone) |
 
 ---
 
-🗒️ Pyra Notes/TTS
+## 🗒️ cyon_notes — Standalone Notes Editor
 
-Pyra Notes/TTS is a combined GTK notes editor and Piper text-to-speech tool, launched from Tools → Pyra Notes/TTS in the Programs menu. Notes are saved to and loaded from `~/Documents/pyra_dev_notes`. The TTS section lets you speak selected text or the full note using either the JOE ♂ or LESSAC ♀ Piper voice. The Discord bot `/say` command also uses Piper to generate voice replies.
+`cyon_notes` is a standalone GTK3 notes editor written in C. It is compiled to `bin/cyon_notes` and run independently of the main Cyon desktop.
 
-**FILE dropdown menu** — a single FILE button replaces the old row of buttons. It contains:
-- `NEW` — clear editor and start a new note
-- `LOAD` — open file dialog (supports `.txt`, `.py`, `.c`, `.h`, `.sh`, extensionless executables/bash scripts, and all files)
-- `SAVE` — save current file (auto-adds `.txt` for new names with no extension)
-- `DELETE FILE` — delete the currently open file with confirmation
-- `TEXT +` / `TEXT −` — increase or decrease editor font size (8px–36px, steps of 2). The log terminal is unaffected and stays fixed size.
+### Features
+- **Multi-tab editing** — open multiple files at once, tabs show `*` when unsaved
+- **File tree panel** — browse and open files from a folder, with live file monitor
+- **Session restore** — on exit, saves open files, active tab, window size, pane position, and font size; restores all on next launch
+- **Syntax highlighting** — 14 keyword color groups + string/comment/operator rules, all defined in `cyon_notes.conf`
+- **Smart indent** — auto-indents after `if`/`def`/`class`/`for`/`while`/`{` etc.
+- **Auto-close** — `(` `[` `{` `'` `"` pairs close automatically; backspace removes the pair
+- **TTS** — speak selected text or full file using Piper (joe/lessac voice), paths configured in conf
+- **Single-instance lock** — only one `cyon_notes` runs at a time
+- **Adjustable font size** — FILE → TEXT + / TEXT −, range 8–36px
 
-**Syntax highlighting** — keywords are highlighted in the editor by color group. All groups are defined as constants at the top of the file and are easy to extend:
+### Configuration (cyon_notes.conf)
 
-| Color | Hex | Keywords |
-|-------|-----|----------|
-| Amber | `#E8A020` | `print for while if elif else` |
-| Cyan | `#00cccc` | `def class return import from` |
-| Steel blue | `#7ec8e3` | `try except` + `=` operator + `@staticmethod` |
-| Lime | `#c8ff00` | class name — the identifier immediately after `class` |
-| Coral | `#ff9955` | reserved — add words to `HIGHLIGHT_KEYWORDS_CORAL` |
+`cyon_notes.conf` lives in the same directory as the binary and is created automatically on first run. It controls everything:
 
-⚠️ Piper and a voice model must both be installed or TTS will not work.
-
-Easiest Setup — compile_cyon option 2
-
-Running option 2 from compile_cyon automatically:
-
-• Creates ~/pyra_env
-• Installs Piper via pip
-• Installs audio dependencies
-• Downloads voice models to ~/piper_models
-
-This is the recommended method.
-
-Manual Setup
-1. Install Piper
-sudo apt update
-sudo apt install -y python3-pip ffmpeg libsndfile1 alsa-utils pulseaudio-utils
-
-source ~/pyra_env/bin/activate
-
-pip install piper-tts
-pip install --upgrade piper-tts onnxruntime pathvalidate
-
-#### 2. Download a Voice Model
-```bash
-mkdir -p ~/cyon/piper_models
-cd ~/cyon/piper_models
-
-# Example: en_US-lessac-medium (male)
-wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx
-wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json
-
-# Example: en_US-amy-medium (female)
-wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx
-wget https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx.json
-```
-
-Each Piper model consists of two files — a `.onnx` model file and a `.onnx.json` config file. Both must be present in `~/cyon/piper_models/`. Browse all available voices at [huggingface.co/rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices).
-
-#### 3. Update cyon_config.ini
 ```ini
-[piper]
-model = en_US-joe-medium.onnx
+[session]
+notes_dir   = ~/cyon          # starting folder for file tree and save dialogs
+open_files  =                 # auto-populated on exit with last open files
+active_tab  = 0               # last active tab index
+
+[editor]
+font_size          = 15       # initial font size in px (8–36)
+tree_hidden        = false    # start with file tree hidden
+tree_pane_position = 600      # divider position in px
+window_width       = 900
+window_height      = 660
+
+[tts]
+piper_path         = /home/cruxible/pyra_env/bin/piper
+model_dir          = /home/cruxible/cyon/piper_models
+voice_joe_model    = en_US-joe-medium.onnx
+voice_lessac_model = en_US-lessac-medium.onnx
+voice              = joe
+
+[highlight_group_1]           # add up to 99 groups
+keywords = for while if ...
+color = #ffb000
+
+[highlight_special]           # regex-based: strings, comments, = operator, etc.
+color_lime    = #c8ff00
+...
 ```
 
-> ℹ️ The model name must exactly match the `.onnx` filename in `~/cyon/piper_models/`.
+All session/editor values are saved automatically on exit. TTS paths only need to be set once.
 
----
+### Running
 
-### Notes
-- All editor tools require `moviepy` (v2+) installed in `pyra_env`
-- MoviePy v2 renames: `subclip` → `subclipped`, `set_audio` → `with_audio`, volume effects now use `MultiplyVolume` — all tools reflect this
-- Tools are launched via `python3` calls from `main_cyon.c` and run as background processes
+```bash
+./bin/cyon_notes
+```
+
+> Requires Piper + aplay for TTS. Run `compile_cyon` option 2 to install them.
+
+
 
 ---
 

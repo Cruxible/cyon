@@ -315,7 +315,11 @@ install_desktop_dependencies() {
 compile_cyon_desktop() {
     echo -e "${CYAN} Compiling C binaries...${NC}"
     mkdir -p "$SCRIPT_DIR/bin"
-    gcc -I"$SCRIPT_DIR/include" "$SCRIPT_DIR"/src/*.c -o "$SCRIPT_DIR/bin/main_cyon" `pkg-config --cflags --libs gtk+-3.0` -lpthread || { echo -e "${RED} Failed to compile main_cyon${NC}"; exit 1; }
+    gcc -I"$SCRIPT_DIR/include" \
+    "$SCRIPT_DIR/src/main_cyon.c" \
+    "$SCRIPT_DIR/src/downloader.c" \
+    -o "$SCRIPT_DIR/bin/main_cyon" \
+    $(pkg-config --cflags --libs gtk+-3.0) -lpthread
     gcc -I"$SCRIPT_DIR/include" -o "$SCRIPT_DIR/bin/cyon_cli" "$SCRIPT_DIR/cli/cyon_cli.c" || { echo -e "${RED} Failed to compile cyon_cli${NC}"; exit 1; }
     gcc -I"$SCRIPT_DIR/include" -o "$SCRIPT_DIR/bin/watcher" "$SCRIPT_DIR/cli/watcher.c" || { echo -e "${RED} Failed to compile watcher${NC}"; exit 1; }
     gcc -I"$SCRIPT_DIR/include" -o "$SCRIPT_DIR/bin/cyon_netscan" "$SCRIPT_DIR/cli/cyon_netscan.c" || { echo -e "${RED} Failed to compile cyon_netscan${NC}"; exit 1; }
@@ -386,6 +390,12 @@ setup_piper_models() {
     source ~/pyra_env/bin/activate
 }
 
+compile_cyon_notes() {
+    echo -e "${CYAN} Compiling cyon_notes...${NC}"
+    mkdir -p "$SCRIPT_DIR/bin"
+    gcc $(pkg-config --cflags gtk+-3.0) -o "$SCRIPT_DIR/bin/cyon_notes" "$SCRIPT_DIR/src/cyon_notes.c" $(pkg-config --libs gtk+-3.0) -lpthread || { echo -e "${RED} Failed to compile cyon_notes${NC}"; exit 1; }
+    echo -e "${CYAN} cyon_notes compiled successfully.${NC}"
+}
 compile_pyra_toolz() {
     echo -e "${CYAN} Compiling pyra_toolz...${NC}"
     sudo apt install -y yt-dlp
@@ -461,17 +471,19 @@ while true; do
     echo -e "${CYAN} 3) Compile pyra_toolz${NC}"
     echo -e "${CYAN} 4) Compile pyra_termux${NC}"
     echo -e "${CYAN} 5) Compile all${NC}"
-    echo -e "${CYAN} 6) Add Cyon/Pyra PATH to ~/.bashrc${NC}"
-    echo -e "${CYAN} 7) Setup Piper voices only${NC}"
-    echo -e "${RED} 8) Remove Pyra PATH from ~/.bashrc${NC}"
-    echo -e "${RED} 9) Uninstall Cyon${NC}"
+    echo -e "${CYAN} 6) Compile cyon_notes${NC}"
+    echo -e "${CYAN} 7) Add Cyon/Pyra PATH to ~/.bashrc${NC}"
+    echo -e "${CYAN} 8) Setup Piper voices only${NC}"
+    echo -e "${RED} 9) Remove Pyra PATH from ~/.bashrc${NC}"
+    echo -e "${RED} 10) Uninstall Cyon${NC}"
     echo -e "${RED} 0) Exit${NC}"
     echo -e "${CYAN} ==============================${NC}"
-    read -p $' \033[0;36mSelect an option [0-9]: \033[0m' choice
+    read -p $' \033[0;36mSelect an option [0-10]: \033[0m' choice
     case $choice in
         1)
             install_desktop_dependencies
             compile_cyon_desktop
+            compile_cyon_notes
             ;;
         2) setup_pyra_env ;;
         3) compile_pyra_toolz ;;
@@ -479,15 +491,17 @@ while true; do
         5)
             install_desktop_dependencies
             compile_cyon_desktop
+            compile_cyon_notes
             setup_pyra_env
             compile_pyra_toolz
             compile_pyra_termux
             echo -e "${CYAN} All binaries compiled successfully.${NC}"
             ;;
-        6) add_path_to_bashrc ;;
-        7) install_piper_binary ; setup_piper_models ;;
-        8) remove_path_from_bashrc ;;
-        9) uninstall_cyon ;;
+        6) compile_cyon_notes ;;
+        7) add_path_to_bashrc ;;
+        8) install_piper_binary ; setup_piper_models ;;
+        9) remove_path_from_bashrc ;;
+        10) uninstall_cyon ;;
         0)
             echo -e "${RED} Exiting. Later!${NC}"
             exit 0
