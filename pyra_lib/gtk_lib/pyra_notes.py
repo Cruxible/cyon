@@ -12,6 +12,7 @@ import subprocess
 import threading
 import configparser
 from pathlib import Path
+import re
 
 # ── pyra_env path setup ──────────────────────────────────────────────────────
 PYRA_ENV = Path.home() / "pyra_env"
@@ -26,7 +27,7 @@ CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pyra_not
 
 # ── Syntax highlighting ─────────────────────────────────────────
 
-HIGHLIGHT_KEYWORDS        = ["print", "for", "while", "if", "elif", "else"]
+HIGHLIGHT_KEYWORDS        = ["print", "for", "while", "if", "elif", "else", "with", "finally"]
 HIGHLIGHT_COLOR           = "#ffb000"   # hacker amber — control flow
 
 HIGHLIGHT_KEYWORDS_CYAN   = ["def", "class", "return", "import", "from"]
@@ -539,6 +540,14 @@ class PyraNotesWindow(Gtk.Window):
             buf.apply_tag(self._kw_tag_lime,
                 buf.get_iter_at_offset(m.start(1)),
                 buf.get_iter_at_offset(m.end(1)))
+        
+        for m in re.finditer(r'([\'"])(.*?)(\1)', text):  # match opening quote, content, closing quote
+            content = m.group(2)
+            start_offset = m.start(2)
+            for w in re.finditer(r'\S+', content):  # highlight only non-space sequences
+                buf.apply_tag(self._kw_tag_coral,
+                    buf.get_iter_at_offset(start_offset + w.start()),
+                    buf.get_iter_at_offset(start_offset + w.end()))
 
         # bright purple — # comments (Python/bash) and // comments (C)
         # matches from # or // to end of line; painted last to override everything
