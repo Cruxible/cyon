@@ -170,6 +170,32 @@ button:hover {
     border-color: #00ff99;
 }
 scrolledwindow { border: 1px solid #1a2a20; }
+notebook > header {
+    background-color: #080810;
+    border-bottom: 1px solid #1a2a20;
+    padding: 0;
+}
+notebook > header > tabs > tab {
+    background-color: #0d0d15;
+    color: #336655;
+    font-family: monospace;
+    font-size: 11px;
+    padding: 4px 8px;
+    border: 1px solid #1a2a20;
+    border-bottom: none;
+    margin-right: 2px;
+}
+notebook > header > tabs > tab:checked {
+    background-color: #05050a;
+    color: #00ff99;
+    border-color: #00ff99;
+}
+.tab-close-x {
+    color: #336655;
+    font-size: 10px;
+    padding: 0 2px;
+}
+.tab-close-x:hover { color: #ff4444; }
 textview, textview text {
     background-color: #05050a;
     color: #00cc77;
@@ -265,28 +291,223 @@ def save_config(cfg):
         cfg.write(f)
 
 
+class EditorTab:
+    """All per-tab state: buffer, views, undo stack, current file path."""
+
+    def __init__(self, hl_groups, hl_special):
+        self._hl_groups  = hl_groups   # list of (keywords, color)
+        self._hl_special = hl_special  # dict of role -> color
+
+        self.current_file  = None
+        self._undo_stack   = []
+        self._redo_stack   = []
+        self._undo_inhibit = False
+
+        # line number view
+        self.line_buf  = Gtk.TextBuffer()
+        self.line_view = Gtk.TextView(buffer=self.line_buf)
+        self.line_view.set_name("line-numbers")
+        self.line_view.set_editable(False)
+        self.line_view.set_cursor_visible(False)
+        self.line_view.set_wrap_mode(Gtk.WrapMode.NONE)
+        self.line_view.set_left_margin(6)
+        self.line_view.set_right_margin(6)
+        self.line_view.set_can_focus(False)
+
+        # editor view
+        self.text_view   = Gtk.TextView()
+        self.text_view.set_name("editor-view")
+        self.text_view.set_wrap_mode(Gtk.WrapMode.NONE)
+        self.text_view.set_left_margin(6)
+        self.text_buffer = self.text_view.get_buffer()
+
+        # highlight tags (one set per buffer)
+        self.kw_tags = []
+        for keywords, color in self._hl_groups:
+            tag = self.text_buffer.create_tag(None, foreground=color)
+            self.kw_tags.append((keywords, tag))
+
+        def _sp(key):
+            return self._hl_special.get(key, "#ffffff")
+
+        self.tag_lime    = self.text_buffer.create_tag(None, foreground=_sp("color_lime"))
+        self.tag_coral   = self.text_buffer.create_tag(None, foreground=_sp("color_coral"))
+        self.tag_comment = self.text_buffer.create_tag(None, foreground=_sp("color_comment"))
+        self.tag_dot_l   = self.text_buffer.create_tag(None, foreground=_sp("color_dot_left"))
+        self.tag_dot_r   = self.text_buffer.create_tag(None, foreground=_sp("color_dot_right"))
+
+        # scrolled window
+        self.scroll = Gtk.ScrolledWindow()
+        self.scroll.set_min_content_height(340)
+        self.scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+
+        editor_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        editor_box.pack_start(self.line_view, False, False, 0)
+        editor_box.pack_start(self.text_view, True,  True,  0)
+        self.scroll.add(editor_box)
+
+        self.scroll.get_vadjustment().connect("value-changed", self._sync_line_scroll)
+        self.text_buffer.connect("changed", self._on_text_changed)
+        self._update_line_numbers()
+
+    def _update_line_numbers(self, *_):
+        count = self.text_buffer.get_line_count()
+        width = len(str(count))
+        nums  = "\n".join(str(i).rjust(width) for i in range(1, count + 1))
+        self.line_buf.set_text(nums)
+
+    def _sync_line_scroll(self, *_):
+        val  = self.scroll.get_vadjustment().get_value()
+        ladj = self.line_view.get_vadjustment()
+        if ladj:
+            ladj.set_value(val)
+
+    def _on_text_changed(self, buf):
+        if not self._undo_inhibit:
+            start, end = buf.get_bounds()
+            snapshot = buf.get_text(start, end, True)
+            if not self._undo_stack or self._undo_stack[-1] != snapshot:
+                self._undo_stack.append(snapshot)
+                if len(self._undo_stack) > 300:
+                    self._undo_stack.pop(0)
+                self._redo_stack.clear()
+        self.apply_highlighting()
+        self._update_line_numbers()
+
+    def undo(self):
+        if len(self._undo_stack) < 2:
+            return False
+        current = self._undo_stack.pop()
+        self._redo_stack.append(current)
+        self._undo_inhibit = True
+        self.text_buffer.set_text(self._undo_stack[-1])
+        self._undo_inhibit = False
+        return True
+
+    def redo(self):
+        if not self._redo_stack:
+            return False
+        state = self._redo_stack.pop()
+        self._undo_stack.append(state)
+        self._undo_inhibit = True
+        self.text_buffer.set_text(state)
+        self._undo_inhibit = False
+        return True
+
+    def apply_highlighting(self):
+        buf        = self.text_buffer
+        start, end = buf.get_bounds()
+        for _, tag in self.kw_tags:
+            buf.remove_tag(tag, start, end)
+        for tag in (self.tag_lime, self.tag_coral, self.tag_comment,
+                    self.tag_dot_l, self.tag_dot_r):
+            buf.remove_tag(tag, start, end)
+        text = buf.get_text(start, end, True)
+        for keywords, tag in self.kw_tags:
+            for kw in keywords:
+                for m in re.finditer(rf"\b{re.escape(kw)}\b", text):
+                    buf.apply_tag(tag,
+                        buf.get_iter_at_offset(m.start()),
+                        buf.get_iter_at_offset(m.end()))
+        if len(self.kw_tags) >= 3:
+            steel_tag = self.kw_tags[2][1]
+            for m in re.finditer(r"(?<![=!<>])=(?!=)", text):
+                buf.apply_tag(steel_tag,
+                    buf.get_iter_at_offset(m.start()),
+                    buf.get_iter_at_offset(m.end()))
+            for m in re.finditer(r"@staticmethod\b", text):
+                buf.apply_tag(steel_tag,
+                    buf.get_iter_at_offset(m.start()),
+                    buf.get_iter_at_offset(m.end()))
+        for m in re.finditer(r"\bclass\s+(\w+)", text):
+            buf.apply_tag(self.tag_lime,
+                buf.get_iter_at_offset(m.start(1)),
+                buf.get_iter_at_offset(m.end(1)))
+        for m in re.finditer(r'([\'"])(.*?)(\1)', text):
+            content      = m.group(2)
+            start_offset = m.start(2)
+            for w in re.finditer(r'\S+', content):
+                buf.apply_tag(self.tag_coral,
+                    buf.get_iter_at_offset(start_offset + w.start()),
+                    buf.get_iter_at_offset(start_offset + w.end()))
+        for m in re.finditer(r'\b(\w+)\.(\w+)\b', text):
+            buf.apply_tag(self.tag_dot_l,
+                buf.get_iter_at_offset(m.start(1)),
+                buf.get_iter_at_offset(m.end(1)))
+            buf.apply_tag(self.tag_dot_r,
+                buf.get_iter_at_offset(m.start(2)),
+                buf.get_iter_at_offset(m.end(2)))
+        for m in re.finditer(r'(#[^\n]*|//[^\n]*)', text):
+            buf.apply_tag(self.tag_comment,
+                buf.get_iter_at_offset(m.start()),
+                buf.get_iter_at_offset(m.end()))
+
+    def load_file(self, path):
+        with open(path, "r", encoding="utf-8") as f:
+            content = f.read()
+        self._undo_inhibit = True
+        self.text_buffer.set_text(content)
+        self._undo_inhibit = False
+        self._undo_stack   = [content]
+        self._redo_stack   = []
+        self.apply_highlighting()
+        self._update_line_numbers()
+        self.current_file = path
+
+    @property
+    def is_dirty(self):
+        """True if buffer differs from the last saved snapshot (undo_stack[0])."""
+        if not self._undo_stack:
+            return False
+        start, end = self.text_buffer.get_bounds()
+        return self.text_buffer.get_text(start, end, True) != self._undo_stack[0]
+
+    def mark_clean(self):
+        """Reset the saved snapshot to current content (called after save)."""
+        start, end = self.text_buffer.get_bounds()
+        current = self.text_buffer.get_text(start, end, True)
+        if self._undo_stack:
+            self._undo_stack[0] = current
+        else:
+            self._undo_stack = [current]
+
+    @property
+    def display_name(self):
+        if not self.current_file:
+            return "untitled"
+        basename = os.path.basename(self.current_file)
+        return basename[:-4] if basename.endswith(".txt") else basename
+
+
 class PyraNotesWindow(Gtk.Window):
     def __init__(self):
         super().__init__(title="▸ PYRA NOTES // TTS")
-        self.set_default_size(800, 640)
+        self.set_default_size(900, 660)
         self.set_border_width(10)
 
-        self.current_file  = None
         self.current_voice = "joe"
-        self.text_size     = 15  # default px, matches CSS
-        self._tree_monitor = None  # Gio.FileMonitor for auto-refresh
-        self._undo_stack   = []   # list of text snapshots
-        self._redo_stack   = []
-        self._undo_inhibit = False  # prevent undo push during undo/redo restore
-        self._tts_procs    = []   # active piper/aplay subprocesses
+        self.text_size     = 15
+        self._tree_monitor = None
+        self._tts_procs    = []
 
         # ── load config ──────────────────────────────────────────────────
         self._cfg = load_config()
         self._tree_folder = self._cfg.get("ui", "tree_folder", fallback=NOTES_DIR)
 
-        # convenience: read a highlight value from config with default fallback
-        def _hl(key):
-            return self._cfg.get("highlight", key, fallback=HIGHLIGHT_DEFAULTS[key])
+        # build highlight group list (keywords, color) from conf
+        self._hl_groups = []
+        for sec in sorted(self._cfg.sections()):
+            if not sec.startswith("highlight_group_"):
+                continue
+            color    = self._cfg.get(sec, "color",    fallback="#ffffff")
+            keywords = self._cfg.get(sec, "keywords", fallback="").split()
+            if keywords:
+                self._hl_groups.append((keywords, color))
+
+        def _sp(key):
+            return self._cfg.get("highlight_special", key,
+                                 fallback=HIGHLIGHT_SPECIAL_DEFAULTS[key])
+        self._hl_special = {k: _sp(k) for k in HIGHLIGHT_SPECIAL_DEFAULTS}
 
         # ── CSS ──────────────────────────────────────────────────────────
         provider = Gtk.CssProvider()
@@ -320,6 +541,7 @@ class PyraNotesWindow(Gtk.Window):
         self._file_menu = Gtk.Menu()
 
         for label, cb in [
+            ("NEW TAB", self._on_new_tab_menu),
             ("NEW", self.on_new),
             ("LOAD", self.on_load),
             ("SAVE", self.on_save),
@@ -350,69 +572,14 @@ class PyraNotesWindow(Gtk.Window):
         menu_btn.connect("clicked", self._on_file_menu_clicked)
         file_bar.pack_start(menu_btn, False, False, 0)
 
-        # ── Text editor + line numbers ────────────────────────────────────
-        # Outer scroll contains a horizontal box: [line_nums | editor]
-        # Both share the same vertical adjustment so they scroll in sync.
-        scroll = Gtk.ScrolledWindow()
-        scroll.set_min_content_height(340)
-        scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        # ── Notebook (tabs) ───────────────────────────────────────────────
+        self._notebook = Gtk.Notebook()
+        self._notebook.set_scrollable(True)
+        self._notebook.set_show_border(False)
+        self._notebook.connect("switch-page", self._on_tab_switched)
 
-        editor_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
-
-        # Line number view (read-only, non-interactive)
-        self._line_buf  = Gtk.TextBuffer()
-        self._line_view = Gtk.TextView(buffer=self._line_buf)
-        self._line_view.set_name("line-numbers")
-        self._line_view.set_editable(False)
-        self._line_view.set_cursor_visible(False)
-        self._line_view.set_wrap_mode(Gtk.WrapMode.NONE)
-        self._line_view.set_left_margin(6)
-        self._line_view.set_right_margin(6)
-        self._line_view.set_can_focus(False)
-        editor_box.pack_start(self._line_view, False, False, 0)
-
-        self.text_view = Gtk.TextView()
-        self.text_view.set_name("editor-view")
-        self.text_view.set_wrap_mode(Gtk.WrapMode.NONE)
-        self.text_view.set_left_margin(6)
-        self.text_buffer = self.text_view.get_buffer()
-        editor_box.pack_start(self.text_view, True, True, 0)
-
-        scroll.add(editor_box)
-
-        # ── Syntax highlight tags — keyword groups (conf-driven) ─────────
-        # Build one tag per highlight_group_N section found in config.
-        # Adding a new group to the conf requires no code changes.
-        self._hl_groups = []  # list of (keywords, tag)
-        for sec in sorted(self._cfg.sections()):
-            if not sec.startswith("highlight_group_"):
-                continue
-            color    = self._cfg.get(sec, "color",    fallback="#ffffff")
-            keywords = self._cfg.get(sec, "keywords", fallback="").split()
-            if not keywords:
-                continue
-            tag = self.text_buffer.create_tag(sec, foreground=color)
-            self._hl_groups.append((keywords, tag))
-
-        # ── Special highlight tags (fixed roles, conf-driven colors) ──────
-        def _sp(key):
-            return self._cfg.get("highlight_special", key,
-                                 fallback=HIGHLIGHT_SPECIAL_DEFAULTS[key])
-
-        self._kw_tag_lime    = self.text_buffer.create_tag("hl_lime",    foreground=_sp("color_lime"))
-        self._kw_tag_coral   = self.text_buffer.create_tag("hl_coral",   foreground=_sp("color_coral"))
-        self._kw_tag_comment = self.text_buffer.create_tag("hl_comment", foreground=_sp("color_comment"))
-        self._kw_tag_white   = self.text_buffer.create_tag("hl_dot_l",   foreground=_sp("color_dot_left"))
-        self._kw_tag_badge   = self.text_buffer.create_tag("hl_dot_r",   foreground=_sp("color_dot_right"))
-        self.text_buffer.connect("changed", self._on_text_changed)
-        self.text_view.connect("key-press-event", self._on_key_press)
-        self.text_view.connect("scroll-event", self._on_scroll_zoom)
-
-        # Keep line numbers scrolled in sync with the editor
-        scroll.get_vadjustment().connect(
-            "value-changed", lambda adj: self._sync_line_scroll(adj)
-        )
-        self._update_line_numbers()
+        # open one blank tab to start
+        self._new_tab()
 
         # ── File tree panel ───────────────────────────────────────────────
         self._tree_panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
@@ -455,7 +622,7 @@ class PyraNotesWindow(Gtk.Window):
 
         # ── Paned: editor left, tree right ───────────────────────────────
         paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
-        paned.pack1(scroll, True, True)
+        paned.pack1(self._notebook, True, True)
         paned.pack2(tree_panel, False, False)
         paned.set_position(580)
         outer.pack_start(paned, True, True, 0)
@@ -538,123 +705,115 @@ class PyraNotesWindow(Gtk.Window):
         last = self._cfg.get("ui", "last_file", fallback=None)
         if last and os.path.isfile(last):
             try:
-                with open(last, "r", encoding="utf-8") as f:
-                    self.text_buffer.set_text(f.read())
-                self._apply_highlighting(self.text_buffer)
-                self._update_line_numbers()
-                self.current_file = last
-                basename = os.path.basename(last)
-                display  = basename[:-4] if basename.endswith(".txt") else basename
-                self.filename_entry.set_text(display)
+                tab = self._tab()
+                tab.load_file(last)
+                self.filename_entry.set_text(tab.display_name)
+                self._update_tab_label(self._notebook.get_current_page(), tab)
                 self.log(f"▸ Restored: {last}")
-                GLib.idle_add(self.text_view.grab_focus)
+                GLib.idle_add(tab.text_view.grab_focus)
             except Exception as e:
                 self.log(f"▸ Could not restore last file: {e}")
 
-    # ── syntax highlighting ───────────────────────────────────────────────
+    # ── tab management ───────────────────────────────────────────────────
 
-    def _on_text_changed(self, buf):
-        if not self._undo_inhibit:
-            start, end = buf.get_bounds()
-            snapshot = buf.get_text(start, end, True)
-            # avoid duplicate snapshots
-            if not self._undo_stack or self._undo_stack[-1] != snapshot:
-                self._undo_stack.append(snapshot)
-                if len(self._undo_stack) > 300:
-                    self._undo_stack.pop(0)
-                self._redo_stack.clear()
-        self._apply_highlighting(buf)
-        self._update_line_numbers()
+    def _tab(self, index=None):
+        """Return the EditorTab for the given page index (default: current)."""
+        if index is None:
+            index = self._notebook.get_current_page()
+        return self._notebook.get_nth_page(index)._tab
 
-    def _apply_highlighting(self, buf):
-        start, end = buf.get_bounds()
+    def _new_tab(self, path=None):
+        """Create a new EditorTab, add it to the notebook, return the tab."""
+        tab = EditorTab(self._hl_groups, self._hl_special)
+        tab.text_view.connect("key-press-event", self._on_key_press)
+        tab.text_view.connect("scroll-event",    self._on_scroll_zoom)
 
-        # clear all group tags
-        for _, tag in self._hl_groups:
-            buf.remove_tag(tag, start, end)
+        # tab label: filename + close button
+        label_box  = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        label_text = Gtk.Label(label="untitled")
+        label_text.set_name("tab-label-text")
+        btn_close  = Gtk.Button()
+        btn_close.set_relief(Gtk.ReliefStyle.NONE)
+        btn_close.set_focus_on_click(False)
+        x_lbl = Gtk.Label(label="✕")
+        x_lbl.get_style_context().add_class("tab-close-x")
+        btn_close.add(x_lbl)
+        label_box.pack_start(label_text, True, True, 0)
+        label_box.pack_start(btn_close,  False, False, 0)
+        label_box.show_all()
 
-        # clear special tags
-        buf.remove_tag(self._kw_tag_lime,    start, end)
-        buf.remove_tag(self._kw_tag_coral,   start, end)
-        buf.remove_tag(self._kw_tag_comment, start, end)
-        buf.remove_tag(self._kw_tag_white,   start, end)
-        buf.remove_tag(self._kw_tag_badge,   start, end)
+        # the page widget carries a reference to the tab object
+        tab.scroll._tab = tab
+        page_idx = self._notebook.append_page(tab.scroll, label_box)
+        self._notebook.set_tab_reorderable(tab.scroll, True)
+        tab._label_text = label_text
 
-        text = buf.get_text(start, end, True)
+        btn_close.connect("clicked", self._on_tab_close, tab.scroll)
 
-        # ── keyword groups (fully conf-driven) ────────────────────────────
-        for keywords, tag in self._hl_groups:
-            for kw in keywords:
-                for m in re.finditer(rf"\b{re.escape(kw)}\b", text):
-                    buf.apply_tag(tag,
-                        buf.get_iter_at_offset(m.start()),
-                        buf.get_iter_at_offset(m.end()))
+        if path:
+            tab.load_file(path)
+            label_text.set_text(tab.display_name)
 
-        # ── special rules (regex-based, not simple keyword lists) ─────────
+        self._notebook.set_current_page(page_idx)
+        self._notebook.show_all()
 
-        # steel blue — = operator (standalone, not == or != or <= or >=)
-        # uses group 3 (steel) tag if it exists, else skip
-        if len(self._hl_groups) >= 3:
-            steel_tag = self._hl_groups[2][1]
-            for m in re.finditer(r"(?<![=!<>])=(?!=)", text):
-                buf.apply_tag(steel_tag,
-                    buf.get_iter_at_offset(m.start()),
-                    buf.get_iter_at_offset(m.end()))
-            for m in re.finditer(r"@staticmethod\b", text):
-                buf.apply_tag(steel_tag,
-                    buf.get_iter_at_offset(m.start()),
-                    buf.get_iter_at_offset(m.end()))
+        if path:
+            self.filename_entry.set_text(tab.display_name)
+        else:
+            self.filename_entry.set_text("")
 
-        # lime — class name: identifier immediately after 'class'
-        for m in re.finditer(r"\bclass\s+(\w+)", text):
-            buf.apply_tag(self._kw_tag_lime,
-                buf.get_iter_at_offset(m.start(1)),
-                buf.get_iter_at_offset(m.end(1)))
+        GLib.idle_add(tab.text_view.grab_focus)
+        return tab
 
-        # coral — string contents
-        for m in re.finditer(r'([\'"])(.*?)(\1)', text):
-            content      = m.group(2)
-            start_offset = m.start(2)
-            for w in re.finditer(r'\S+', content):
-                buf.apply_tag(self._kw_tag_coral,
-                    buf.get_iter_at_offset(start_offset + w.start()),
-                    buf.get_iter_at_offset(start_offset + w.end()))
+    def _update_tab_label(self, index, tab):
+        label = tab._label_text
+        label.set_text(tab.display_name)
 
-        # dot notation — object.method (left=white, right=badge)
-        for m in re.finditer(r'\b(\w+)\.(\w+)\b', text):
-            buf.apply_tag(self._kw_tag_white,
-                buf.get_iter_at_offset(m.start(1)),
-                buf.get_iter_at_offset(m.end(1)))
-            buf.apply_tag(self._kw_tag_badge,
-                buf.get_iter_at_offset(m.start(2)),
-                buf.get_iter_at_offset(m.end(2)))
+    def _on_tab_switched(self, notebook, page, index):
+        tab = self._tab(index)
+        self.filename_entry.set_text(tab.display_name if tab.current_file else "")
 
-        # comments — # and // to end of line (painted last, overrides everything)
-        for m in re.finditer(r'(#[^\n]*|//[^\n]*)', text):
-            buf.apply_tag(self._kw_tag_comment,
-                buf.get_iter_at_offset(m.start()),
-                buf.get_iter_at_offset(m.end()))
+    def _on_tab_close(self, btn, page_widget):
+        idx = self._notebook.page_num(page_widget)
+        tab = page_widget._tab
+        if not self._confirm_close(tab):
+            return
+        if self._notebook.get_n_pages() == 1:
+            # last tab — clear instead of removing
+            tab.current_file = None
+            tab._undo_stack  = []
+            tab._redo_stack  = []
+            tab.text_buffer.set_text("")
+            tab._label_text.set_text("untitled")
+            self.filename_entry.set_text("")
+            self.log("▸ Tab cleared.")
+        else:
+            self._notebook.remove_page(idx)
 
-    # ── line numbers ──────────────────────────────────────────────────────
-
-    def _update_line_numbers(self, *_):
-        count = self.text_buffer.get_line_count()
-        # right-align numbers to width of highest line number
-        width  = len(str(count))
-        nums   = "\n".join(str(i).rjust(width) for i in range(1, count + 1))
-        self._line_buf.set_text(nums)
-
-    def _sync_line_scroll(self, *_):
-        """Mirror the editor's vertical scroll position onto the line view."""
-        # Use the text_view's own vadjustment via its scrolled window
-        sw = self.text_view.get_parent()  # editor_box
-        if sw:
-            sw2 = sw.get_parent()  # ScrolledWindow
-            if sw2 and isinstance(sw2, Gtk.ScrolledWindow):
-                val = sw2.get_vadjustment().get_value()
-                ladj = self._line_view.get_vadjustment()
-                if ladj:
-                    ladj.set_value(val)
+    def _confirm_close(self, tab):
+        """If tab has unsaved changes, ask user. Returns True if safe to proceed."""
+        if not tab.is_dirty:
+            return True
+        name = tab.display_name
+        dlg = Gtk.MessageDialog(
+            transient_for=self, flags=0,
+            message_type=Gtk.MessageType.WARNING,
+            buttons=Gtk.ButtonsType.NONE,
+            text=f"▸ '{name}' has unsaved changes.",
+        )
+        dlg.format_secondary_text("Save before closing?")
+        dlg.add_button("Discard", Gtk.ResponseType.REJECT)
+        dlg.add_button("Cancel",  Gtk.ResponseType.CANCEL)
+        dlg.add_button("Save",    Gtk.ResponseType.ACCEPT)
+        dlg.set_default_response(Gtk.ResponseType.ACCEPT)
+        resp = dlg.run()
+        dlg.destroy()
+        if resp == Gtk.ResponseType.ACCEPT:
+            self.on_save(None)
+            return True
+        if resp == Gtk.ResponseType.REJECT:
+            return True
+        return False  # Cancel
 
     # ── file tree ─────────────────────────────────────────────────────────
 
@@ -737,16 +896,8 @@ class PyraNotesWindow(Gtk.Window):
         fpath = self._tree_store.get_value(it, 1)
         if os.path.isfile(fpath):
             try:
-                with open(fpath, "r", encoding="utf-8") as f:
-                    self.text_buffer.set_text(f.read())
-                self._apply_highlighting(self.text_buffer)
-                self._update_line_numbers()
-                self.current_file = fpath
-                basename = os.path.basename(fpath)
-                display  = basename[:-4] if basename.endswith(".txt") else basename
-                self.filename_entry.set_text(display)
+                tab = self._new_tab(fpath)
                 self.log(f"▸ Loaded: {fpath}")
-                GLib.idle_add(self.text_view.grab_focus)
             except Exception as e:
                 self.log(f"▸ ERROR loading: {e}")
 
@@ -775,6 +926,13 @@ class PyraNotesWindow(Gtk.Window):
             self.on_save(None)
             return True
 
+        # ── Ctrl+T — new tab ──────────────────────────────────────────────
+        if ctrl and event.keyval == Gdk.KEY_t:
+            self._new_tab()
+            self.log("▸ New tab.")
+            self.filename_entry.grab_focus()
+            return True
+
         # ── Ctrl+Z — undo ─────────────────────────────────────────────────
         if ctrl and event.keyval == Gdk.KEY_z:
             self.on_undo(None)
@@ -797,7 +955,7 @@ class PyraNotesWindow(Gtk.Window):
 
         # ── Tab — insert 4 spaces ─────────────────────────────────────────
         if event.keyval == Gdk.KEY_Tab:
-            self.text_buffer.insert_at_cursor("    ")
+            self._tab().text_buffer.insert_at_cursor("    ")
             return True
 
         # ── Auto-close brackets & quotes ──────────────────────────────────
@@ -810,7 +968,7 @@ class PyraNotesWindow(Gtk.Window):
         }
         if not ctrl and event.keyval in _PAIRS:
             open_ch, close_ch = _PAIRS[event.keyval]
-            buf    = self.text_buffer
+            buf    = self._tab().text_buffer
             cursor = buf.get_iter_at_mark(buf.get_insert())
             # if next char is already the closing pair, just skip over it
             next_iter = cursor.copy()
@@ -829,7 +987,7 @@ class PyraNotesWindow(Gtk.Window):
 
         # ── Backspace — remove auto-closed pair if cursor is between them ─
         if event.keyval == Gdk.KEY_BackSpace:
-            buf    = self.text_buffer
+            buf    = self._tab().text_buffer
             cursor = buf.get_iter_at_mark(buf.get_insert())
             prev   = cursor.copy()
             if prev.backward_char():
@@ -845,7 +1003,7 @@ class PyraNotesWindow(Gtk.Window):
 
         # ── Enter — smart indent ──────────────────────────────────────────
         if event.keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
-            buf    = self.text_buffer
+            buf    = self._tab().text_buffer
             cursor = buf.get_iter_at_mark(buf.get_insert())
 
             line_start = cursor.copy()
@@ -897,28 +1055,16 @@ class PyraNotesWindow(Gtk.Window):
     # ── undo / redo ───────────────────────────────────────────────────────
 
     def on_undo(self, _item):
-        if len(self._undo_stack) < 2:
+        if self._tab().undo():
+            self.log("▸ Undo")
+        else:
             self.log("▸ Nothing to undo.")
-            return
-        # top of stack is current state — pop it onto redo, restore previous
-        current = self._undo_stack.pop()
-        self._redo_stack.append(current)
-        previous = self._undo_stack[-1]
-        self._undo_inhibit = True
-        self.text_buffer.set_text(previous)
-        self._undo_inhibit = False
-        self.log("▸ Undo")
 
     def on_redo(self, _item):
-        if not self._redo_stack:
+        if self._tab().redo():
+            self.log("▸ Redo")
+        else:
             self.log("▸ Nothing to redo.")
-            return
-        state = self._redo_stack.pop()
-        self._undo_stack.append(state)
-        self._undo_inhibit = True
-        self.text_buffer.set_text(state)
-        self._undo_inhibit = False
-        self.log("▸ Redo")
 
     # ── log / status ─────────────────────────────────────────────────────
 
@@ -940,8 +1086,9 @@ class PyraNotesWindow(Gtk.Window):
         fresh.read(CONFIG_PATH)
         if not fresh.has_section("ui"):
             fresh.add_section("ui")
-        if self.current_file:
-            fresh.set("ui", "last_file", self.current_file)
+        tab_file = self._tab().current_file if self._notebook.get_n_pages() > 0 else None
+        if tab_file:
+            fresh.set("ui", "last_file", tab_file)
         elif fresh.has_option("ui", "last_file"):
             fresh.remove_option("ui", "last_file")
         if self._tree_folder:
@@ -1010,19 +1157,19 @@ class PyraNotesWindow(Gtk.Window):
     # ── TTS ──────────────────────────────────────────────────────────────
 
     def on_speak_all(self, _btn):
-        start, end = self.text_buffer.get_bounds()
-        text = self.text_buffer.get_text(start, end, True).strip()
+        start, end = self._tab().text_buffer.get_bounds()
+        text = self._tab().text_buffer.get_text(start, end, True).strip()
         if not text:
             self.log("▸ TTS: no text in editor.")
             return
         self._dispatch_tts(text)
 
     def on_speak_selection(self, _btn):
-        bounds = self.text_buffer.get_selection_bounds()
+        bounds = self._tab().text_buffer.get_selection_bounds()
         if not bounds:
             self.log("▸ TTS: no selection — highlight some text first.")
             return
-        text = self.text_buffer.get_text(bounds[0], bounds[1], True).strip()
+        text = self._tab().text_buffer.get_text(bounds[0], bounds[1], True).strip()
         if text:
             self._dispatch_tts(text)
 
@@ -1085,10 +1232,21 @@ class PyraNotesWindow(Gtk.Window):
 
     # ── file ops ─────────────────────────────────────────────────────────
 
+    def _on_new_tab_menu(self, _item):
+        self._new_tab()
+        self.log("▸ New tab.")
+        self.filename_entry.grab_focus()
+
     def on_new(self, _btn):
-        self.current_file = None
+        tab = self._tab()
+        if not self._confirm_close(tab):
+            return
+        tab.current_file = None
+        tab._undo_stack  = []
+        tab._redo_stack  = []
+        tab.text_buffer.set_text("")
+        tab._label_text.set_text("untitled")
         self.filename_entry.set_text("")
-        self.text_buffer.set_text("")
         self.log("▸ New note — enter filename and hit SAVE.")
         self.filename_entry.grab_focus()
 
@@ -1137,31 +1295,25 @@ class PyraNotesWindow(Gtk.Window):
         if dialog.run() == Gtk.ResponseType.OK:
             path = dialog.get_filename()
             try:
-                with open(path, "r", encoding="utf-8") as f:
-                    self.text_buffer.set_text(f.read())
-                self._apply_highlighting(self.text_buffer)
-                self._update_line_numbers()
-                self.current_file = path
-                basename = os.path.basename(path)
-                # Strip .txt for display; keep .py/.c/.sh/etc. visible
-                display = basename[:-4] if basename.endswith(".txt") else basename
-                self.filename_entry.set_text(display)
+                tab = self._new_tab(path)
                 self.log(f"▸ Loaded: {path}")
-                GLib.idle_add(self.text_view.grab_focus)
             except Exception as e:
                 self.log(f"▸ ERROR loading: {e}")
         dialog.destroy()
 
     def on_save(self, _btn):
-        # No known file path — open Save As dialog instead
-        if not self.current_file:
+        tab = self._tab()
+        if not tab.current_file:
             self.on_save_as(_btn)
             return
-        start, end = self.text_buffer.get_bounds()
+        start, end = tab.text_buffer.get_bounds()
         try:
-            with open(self.current_file, "w", encoding="utf-8") as f:
-                f.write(self.text_buffer.get_text(start, end, True))
-            self.log(f"▸ Saved: {self.current_file}")
+            with open(tab.current_file, "w", encoding="utf-8") as f:
+                f.write(tab.text_buffer.get_text(start, end, True))
+            tab.mark_clean()
+            self._update_tab_label(self._notebook.get_current_page(), tab)
+            self.filename_entry.set_text(tab.display_name)
+            self.log(f"▸ Saved: {tab.current_file}")
         except Exception as e:
             self.log(f"▸ ERROR saving: {e}")
 
@@ -1175,24 +1327,25 @@ class PyraNotesWindow(Gtk.Window):
             Gtk.STOCK_SAVE,   Gtk.ResponseType.OK,
         )
         dialog.set_do_overwrite_confirmation(True)
+        tab = self._tab()
         dialog.set_current_folder(
-            os.path.dirname(self.current_file) if self.current_file else NOTES_DIR
+            os.path.dirname(tab.current_file) if tab.current_file else NOTES_DIR
         )
-        # pre-fill current filename if we have one
         current_name = self.filename_entry.get_text().strip()
         if current_name:
             dialog.set_current_name(current_name if "." in current_name else current_name + ".txt")
 
         if dialog.run() == Gtk.ResponseType.OK:
             path  = dialog.get_filename()
-            start, end = self.text_buffer.get_bounds()
+            start, end = tab.text_buffer.get_bounds()
             try:
                 with open(path, "w", encoding="utf-8") as f:
-                    f.write(self.text_buffer.get_text(start, end, True))
-                self.current_file = path
+                    f.write(tab.text_buffer.get_text(start, end, True))
+                tab.current_file = path
                 basename = os.path.basename(path)
                 display  = basename[:-4] if basename.endswith(".txt") else basename
                 self.filename_entry.set_text(display)
+                self._update_tab_label(self._notebook.get_current_page(), tab)
                 self.log(f"▸ Saved as: {path}")
             except Exception as e:
                 self.log(f"▸ ERROR saving: {e}")
@@ -1200,7 +1353,7 @@ class PyraNotesWindow(Gtk.Window):
 
     def on_delete(self, _btn):
         name = self.filename_entry.get_text().strip()
-        path = self.current_file or self._resolve_path(name)
+        path = self._tab().current_file or self._resolve_path(name)
         if not path or not os.path.exists(path):
             self.log("▸ ERROR: no file to delete.")
             return
