@@ -394,6 +394,21 @@ compile_cyon_notes() {
     echo -e "${CYAN} Compiling cyon_notes...${NC}"
     mkdir -p "$SCRIPT_DIR/bin"
     gcc $(pkg-config --cflags gtk+-3.0) -o "$SCRIPT_DIR/bin/cyon_notes" "$SCRIPT_DIR/src/cyon_notes.c" $(pkg-config --libs gtk+-3.0) -lpthread || { echo -e "${RED} Failed to compile cyon_notes${NC}"; exit 1; }
+    mkdir -p ~/.local/share/applications
+    tee ~/.local/share/applications/cyon_notes.desktop > /dev/null <<EOF
+[Desktop Entry]
+Type=Application
+Encoding=UTF-8
+Name=Cyon Notes
+Comment=Cyon DE
+Exec=$SCRIPT_DIR/bin/cyon_notes
+Icon=$SCRIPT_DIR/bin/cyon.png
+#Icon=$SCRIPT_DIR/bin/main_cyon.webp
+Terminal=false
+Categories=Application;
+EOF
+    
+    update-desktop-database ~/.local/share/applications
     echo -e "${CYAN} cyon_notes compiled successfully.${NC}"
 }
 compile_pyra_toolz() {
@@ -443,6 +458,7 @@ uninstall_cyon() {
             remove_path_from_bashrc
             echo -e "${RED} Removing desktop entry...${NC}"
             rm -f ~/.local/share/applications/cyon.desktop
+            rm -f ~/.local/share/applications/cyon_notes.desktop
             if command -v update-desktop-database &>/dev/null; then
                 update-desktop-database ~/.local/share/applications
             fi
