@@ -37,10 +37,10 @@ HIGHLIGHT_GROUP_DEFAULTS = [
 
 # Special (non-keyword) highlight defaults — still conf-driven but not generic groups
 HIGHLIGHT_SPECIAL_DEFAULTS = {
-    "color_lime":      "#c8ff00",   # class name after 'class'
-    "color_coral":     "#ff9966",   # string contents
-    "color_comment":   "#6a5acd",   # # and // comments
-    "color_dot_left":  "#ffffff",   # object side of dot notation
+    "color_lime": "#c8ff00",   # class name after 'class'
+    "color_coral": "#ff9966",   # string contents
+    "color_comment": "#6a5acd",   # # and // comments
+    "color_dot_left": "#ffffff",   # object side of dot notation
     "color_dot_right": "#ffb000",   # method side of dot notation
 }
 
@@ -109,7 +109,7 @@ entry {
     border-radius: 0px;
     padding: 4px;
 }
-entry:focus { border-color: #00ff99; }
+entry:focus { border-color: #E8A020; }
 button {
     background-color: #0d0d15;
     color: #00cc77;
@@ -122,7 +122,7 @@ button {
 button:hover {
     background-color: #003322;
     color: #00ff99;
-    border-color: #00ff99;
+    border-color: #E8A020;
 }
 .btn-action {
     background-color: #003322;
@@ -167,7 +167,7 @@ button:hover {
 .btn-menu:hover {
     background-color: #003322;
     color: #00ff99;
-    border-color: #00ff99;
+    border-color: #E8A020;
 }
 scrolledwindow { border: 1px solid #1a2a20; }
 notebook > header {
@@ -188,7 +188,7 @@ notebook > header > tabs > tab {
 notebook > header > tabs > tab:checked {
     background-color: #05050a;
     color: #00ff99;
-    border-color: #00ff99;
+    border-color: #E8A020;
 }
 .tab-close-x {
     color: #336655;
@@ -247,7 +247,7 @@ treeview:selected {
 .btn-tree:hover {
     background-color: #003322;
     color: #00ff99;
-    border-color: #00ff99;
+    border-color: #E8A020;
 }
 """
 
