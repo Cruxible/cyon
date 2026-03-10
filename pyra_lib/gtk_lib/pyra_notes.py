@@ -4,7 +4,7 @@
 
 import gi
 gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk, Gdk, GLib
+from gi.repository import Gtk, Gdk, GLib, Gio
 
 import os
 import sys
@@ -25,22 +25,24 @@ sys.path.append(str(PYRA_LIB))
 NOTES_DIR   = os.path.expanduser("~/Documents/pyra_dev_notes")
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pyra_notes.conf")
 
-# ── Syntax highlighting ─────────────────────────────────────────
+# ── Syntax highlighting defaults (written to pyra_notes.conf if absent) ─────
+# Each highlight_group_N section needs: keywords = ... and color = #rrggbb
+# Add as many groups as you like in pyra_notes.conf — no code changes needed.
 
-HIGHLIGHT_KEYWORDS        = ["print", "for", "while", "if", "elif", "else", "with", "finally"]
-HIGHLIGHT_COLOR           = "#ffb000"   # hacker amber — control flow
+HIGHLIGHT_GROUP_DEFAULTS = [
+    {"section": "highlight_group_1", "keywords": "print for while if elif else with finally", "color": "#ffb000"},
+    {"section": "highlight_group_2", "keywords": "def class return import from",              "color": "#5fd7ff"},
+    {"section": "highlight_group_3", "keywords": "try except self",                           "color": "#8fd3ff"},
+]
 
-HIGHLIGHT_KEYWORDS_CYAN   = ["def", "class", "return", "import", "from"]
-HIGHLIGHT_COLOR_CYAN      = "#5fd7ff"   # softer cyan — structure
-
-HIGHLIGHT_KEYWORDS_STEEL  = ["try", "except", "self"]
-HIGHLIGHT_COLOR_STEEL     = "#8fd3ff"   # pale blue — operators / error handling
-
-HIGHLIGHT_COLOR_LIME      = "#c8ff00"   # neon lime — class names
-
-HIGHLIGHT_COLOR_CORAL     = "#ff9966"   # warm orange — spare keyword group
-
-HIGHLIGHT_COLOR_COMMENT   = "#6a5acd"   # muted violet — comments
+# Special (non-keyword) highlight defaults — still conf-driven but not generic groups
+HIGHLIGHT_SPECIAL_DEFAULTS = {
+    "color_lime":      "#c8ff00",   # class name after 'class'
+    "color_coral":     "#ff9966",   # string contents
+    "color_comment":   "#6a5acd",   # # and // comments
+    "color_dot_left":  "#ffffff",   # object side of dot notation
+    "color_dot_right": "#ffb000",   # method side of dot notation
+}
 
 VOICES = {
     "joe": {
@@ -231,6 +233,30 @@ def ensure_notes_dir():
 def load_config():
     cfg = configparser.ConfigParser()
     cfg.read(CONFIG_PATH)
+    changed = False
+
+    # seed default keyword groups if missing
+    for grp in HIGHLIGHT_GROUP_DEFAULTS:
+        sec = grp["section"]
+        if not cfg.has_section(sec):
+            cfg.add_section(sec)
+        if not cfg.has_option(sec, "keywords"):
+            cfg.set(sec, "keywords", grp["keywords"])
+            changed = True
+        if not cfg.has_option(sec, "color"):
+            cfg.set(sec, "color", grp["color"])
+            changed = True
+
+    # seed special (non-keyword) highlight values
+    if not cfg.has_section("highlight_special"):
+        cfg.add_section("highlight_special")
+    for key, val in HIGHLIGHT_SPECIAL_DEFAULTS.items():
+        if not cfg.has_option("highlight_special", key):
+            cfg.set("highlight_special", key, val)
+            changed = True
+
+    if changed:
+        save_config(cfg)
     return cfg
 
 
@@ -248,10 +274,19 @@ class PyraNotesWindow(Gtk.Window):
         self.current_file  = None
         self.current_voice = "joe"
         self.text_size     = 15  # default px, matches CSS
+        self._tree_monitor = None  # Gio.FileMonitor for auto-refresh
+        self._undo_stack   = []   # list of text snapshots
+        self._redo_stack   = []
+        self._undo_inhibit = False  # prevent undo push during undo/redo restore
+        self._tts_procs    = []   # active piper/aplay subprocesses
 
         # ── load config ──────────────────────────────────────────────────
         self._cfg = load_config()
         self._tree_folder = self._cfg.get("ui", "tree_folder", fallback=NOTES_DIR)
+
+        # convenience: read a highlight value from config with default fallback
+        def _hl(key):
+            return self._cfg.get("highlight", key, fallback=HIGHLIGHT_DEFAULTS[key])
 
         # ── CSS ──────────────────────────────────────────────────────────
         provider = Gtk.CssProvider()
@@ -289,6 +324,9 @@ class PyraNotesWindow(Gtk.Window):
             ("LOAD", self.on_load),
             ("SAVE", self.on_save),
             ("SAVE AS", self.on_save_as),
+            (None, None),
+            ("UNDO  Ctrl+Z", self.on_undo),
+            ("REDO  Ctrl+Y", self.on_redo),
             (None, None),
             ("DELETE FILE", self.on_delete),
             (None, None),
@@ -335,34 +373,40 @@ class PyraNotesWindow(Gtk.Window):
 
         self.text_view = Gtk.TextView()
         self.text_view.set_name("editor-view")
-        self.text_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+        self.text_view.set_wrap_mode(Gtk.WrapMode.NONE)
         self.text_view.set_left_margin(6)
         self.text_buffer = self.text_view.get_buffer()
         editor_box.pack_start(self.text_view, True, True, 0)
 
         scroll.add(editor_box)
 
-        # ── Syntax highlight tags ─────────────────────────────────────────
-        self._kw_tag = self.text_buffer.create_tag(
-            "keyword", foreground=HIGHLIGHT_COLOR
-        )
-        self._kw_tag_cyan = self.text_buffer.create_tag(
-            "keyword_cyan", foreground=HIGHLIGHT_COLOR_CYAN
-        )
-        self._kw_tag_steel = self.text_buffer.create_tag(
-            "keyword_steel", foreground=HIGHLIGHT_COLOR_STEEL
-        )
-        self._kw_tag_lime = self.text_buffer.create_tag(
-            "keyword_lime", foreground=HIGHLIGHT_COLOR_LIME
-        )
-        self._kw_tag_coral = self.text_buffer.create_tag(
-            "keyword_coral", foreground=HIGHLIGHT_COLOR_CORAL
-        )
-        self._kw_tag_comment = self.text_buffer.create_tag(
-            "comment", foreground=HIGHLIGHT_COLOR_COMMENT
-        )
+        # ── Syntax highlight tags — keyword groups (conf-driven) ─────────
+        # Build one tag per highlight_group_N section found in config.
+        # Adding a new group to the conf requires no code changes.
+        self._hl_groups = []  # list of (keywords, tag)
+        for sec in sorted(self._cfg.sections()):
+            if not sec.startswith("highlight_group_"):
+                continue
+            color    = self._cfg.get(sec, "color",    fallback="#ffffff")
+            keywords = self._cfg.get(sec, "keywords", fallback="").split()
+            if not keywords:
+                continue
+            tag = self.text_buffer.create_tag(sec, foreground=color)
+            self._hl_groups.append((keywords, tag))
+
+        # ── Special highlight tags (fixed roles, conf-driven colors) ──────
+        def _sp(key):
+            return self._cfg.get("highlight_special", key,
+                                 fallback=HIGHLIGHT_SPECIAL_DEFAULTS[key])
+
+        self._kw_tag_lime    = self.text_buffer.create_tag("hl_lime",    foreground=_sp("color_lime"))
+        self._kw_tag_coral   = self.text_buffer.create_tag("hl_coral",   foreground=_sp("color_coral"))
+        self._kw_tag_comment = self.text_buffer.create_tag("hl_comment", foreground=_sp("color_comment"))
+        self._kw_tag_white   = self.text_buffer.create_tag("hl_dot_l",   foreground=_sp("color_dot_left"))
+        self._kw_tag_badge   = self.text_buffer.create_tag("hl_dot_r",   foreground=_sp("color_dot_right"))
         self.text_buffer.connect("changed", self._on_text_changed)
         self.text_view.connect("key-press-event", self._on_key_press)
+        self.text_view.connect("scroll-event", self._on_scroll_zoom)
 
         # Keep line numbers scrolled in sync with the editor
         scroll.get_vadjustment().connect(
@@ -463,6 +507,11 @@ class PyraNotesWindow(Gtk.Window):
         btn_speak_all.connect("clicked", self.on_speak_all)
         tts_row.pack_start(btn_speak_all, False, False, 0)
 
+        btn_stop = Gtk.Button(label="✕ STOP")
+        btn_stop.get_style_context().add_class("btn-danger")
+        btn_stop.connect("clicked", self.on_tts_stop)
+        tts_row.pack_start(btn_stop, False, False, 0)
+
         # ── Log terminal ─────────────────────────────────────────────────
         log_scroll = Gtk.ScrolledWindow()
         log_scroll.set_min_content_height(72)
@@ -480,77 +529,107 @@ class PyraNotesWindow(Gtk.Window):
         self.status.set_halign(Gtk.Align.START)
         outer.pack_start(self.status, False, False, 0)
 
-        self.connect("destroy", Gtk.main_quit)
+        self.connect("destroy", self._on_destroy)
         self.show_all()
 
         self.log(f"▸ Ready. Notes dir: {NOTES_DIR}")
 
+        # ── restore last opened file ──────────────────────────────────────
+        last = self._cfg.get("ui", "last_file", fallback=None)
+        if last and os.path.isfile(last):
+            try:
+                with open(last, "r", encoding="utf-8") as f:
+                    self.text_buffer.set_text(f.read())
+                self._apply_highlighting(self.text_buffer)
+                self._update_line_numbers()
+                self.current_file = last
+                basename = os.path.basename(last)
+                display  = basename[:-4] if basename.endswith(".txt") else basename
+                self.filename_entry.set_text(display)
+                self.log(f"▸ Restored: {last}")
+                GLib.idle_add(self.text_view.grab_focus)
+            except Exception as e:
+                self.log(f"▸ Could not restore last file: {e}")
+
     # ── syntax highlighting ───────────────────────────────────────────────
 
     def _on_text_changed(self, buf):
+        if not self._undo_inhibit:
+            start, end = buf.get_bounds()
+            snapshot = buf.get_text(start, end, True)
+            # avoid duplicate snapshots
+            if not self._undo_stack or self._undo_stack[-1] != snapshot:
+                self._undo_stack.append(snapshot)
+                if len(self._undo_stack) > 300:
+                    self._undo_stack.pop(0)
+                self._redo_stack.clear()
         self._apply_highlighting(buf)
         self._update_line_numbers()
 
     def _apply_highlighting(self, buf):
-        import re
         start, end = buf.get_bounds()
-        buf.remove_tag(self._kw_tag,       start, end)
-        buf.remove_tag(self._kw_tag_cyan,  start, end)
-        buf.remove_tag(self._kw_tag_steel, start, end)
-        buf.remove_tag(self._kw_tag_lime,  start, end)
-        buf.remove_tag(self._kw_tag_coral, start, end)
+
+        # clear all group tags
+        for _, tag in self._hl_groups:
+            buf.remove_tag(tag, start, end)
+
+        # clear special tags
+        buf.remove_tag(self._kw_tag_lime,    start, end)
+        buf.remove_tag(self._kw_tag_coral,   start, end)
         buf.remove_tag(self._kw_tag_comment, start, end)
+        buf.remove_tag(self._kw_tag_white,   start, end)
+        buf.remove_tag(self._kw_tag_badge,   start, end)
+
         text = buf.get_text(start, end, True)
 
-        # amber — control flow keywords
-        for kw in HIGHLIGHT_KEYWORDS:
-            for m in re.finditer(rf"\b{re.escape(kw)}\b", text):
-                buf.apply_tag(self._kw_tag,
+        # ── keyword groups (fully conf-driven) ────────────────────────────
+        for keywords, tag in self._hl_groups:
+            for kw in keywords:
+                for m in re.finditer(rf"\b{re.escape(kw)}\b", text):
+                    buf.apply_tag(tag,
+                        buf.get_iter_at_offset(m.start()),
+                        buf.get_iter_at_offset(m.end()))
+
+        # ── special rules (regex-based, not simple keyword lists) ─────────
+
+        # steel blue — = operator (standalone, not == or != or <= or >=)
+        # uses group 3 (steel) tag if it exists, else skip
+        if len(self._hl_groups) >= 3:
+            steel_tag = self._hl_groups[2][1]
+            for m in re.finditer(r"(?<![=!<>])=(?!=)", text):
+                buf.apply_tag(steel_tag,
+                    buf.get_iter_at_offset(m.start()),
+                    buf.get_iter_at_offset(m.end()))
+            for m in re.finditer(r"@staticmethod\b", text):
+                buf.apply_tag(steel_tag,
                     buf.get_iter_at_offset(m.start()),
                     buf.get_iter_at_offset(m.end()))
 
-        # cyan — structure keywords
-        for kw in HIGHLIGHT_KEYWORDS_CYAN:
-            for m in re.finditer(rf"\b{re.escape(kw)}\b", text):
-                buf.apply_tag(self._kw_tag_cyan,
-                    buf.get_iter_at_offset(m.start()),
-                    buf.get_iter_at_offset(m.end()))
-
-        # steel blue — try/except keywords
-        for kw in HIGHLIGHT_KEYWORDS_STEEL:
-            for m in re.finditer(rf"\b{re.escape(kw)}\b", text):
-                buf.apply_tag(self._kw_tag_steel,
-                    buf.get_iter_at_offset(m.start()),
-                    buf.get_iter_at_offset(m.end()))
-
-        # steel blue — = operator (standalone, not == or !=  or <=  or >=)
-        for m in re.finditer(r"(?<![=!<>])=(?!=)", text):
-            buf.apply_tag(self._kw_tag_steel,
-                buf.get_iter_at_offset(m.start()),
-                buf.get_iter_at_offset(m.end()))
-
-        # steel blue — @staticmethod decorator (includes the @)
-        for m in re.finditer(r"@staticmethod\b", text):
-            buf.apply_tag(self._kw_tag_steel,
-                buf.get_iter_at_offset(m.start()),
-                buf.get_iter_at_offset(m.end()))
-
-        # lime — class name: the identifier immediately after 'class'
+        # lime — class name: identifier immediately after 'class'
         for m in re.finditer(r"\bclass\s+(\w+)", text):
             buf.apply_tag(self._kw_tag_lime,
                 buf.get_iter_at_offset(m.start(1)),
                 buf.get_iter_at_offset(m.end(1)))
-        
-        for m in re.finditer(r'([\'"])(.*?)(\1)', text):  # match opening quote, content, closing quote
-            content = m.group(2)
+
+        # coral — string contents
+        for m in re.finditer(r'([\'"])(.*?)(\1)', text):
+            content      = m.group(2)
             start_offset = m.start(2)
-            for w in re.finditer(r'\S+', content):  # highlight only non-space sequences
+            for w in re.finditer(r'\S+', content):
                 buf.apply_tag(self._kw_tag_coral,
                     buf.get_iter_at_offset(start_offset + w.start()),
                     buf.get_iter_at_offset(start_offset + w.end()))
 
-        # bright purple — # comments (Python/bash) and // comments (C)
-        # matches from # or // to end of line; painted last to override everything
+        # dot notation — object.method (left=white, right=badge)
+        for m in re.finditer(r'\b(\w+)\.(\w+)\b', text):
+            buf.apply_tag(self._kw_tag_white,
+                buf.get_iter_at_offset(m.start(1)),
+                buf.get_iter_at_offset(m.end(1)))
+            buf.apply_tag(self._kw_tag_badge,
+                buf.get_iter_at_offset(m.start(2)),
+                buf.get_iter_at_offset(m.end(2)))
+
+        # comments — # and // to end of line (painted last, overrides everything)
         for m in re.finditer(r'(#[^\n]*|//[^\n]*)', text):
             buf.apply_tag(self._kw_tag_comment,
                 buf.get_iter_at_offset(m.start()),
@@ -567,7 +646,6 @@ class PyraNotesWindow(Gtk.Window):
 
     def _sync_line_scroll(self, *_):
         """Mirror the editor's vertical scroll position onto the line view."""
-        adj = self.text_view.get_parent().get_parent() if False else None
         # Use the text_view's own vadjustment via its scrolled window
         sw = self.text_view.get_parent()  # editor_box
         if sw:
@@ -586,11 +664,13 @@ class PyraNotesWindow(Gtk.Window):
         if not os.path.isdir(folder):
             return
         self._tree_folder = folder
-        # persist to config
-        if not self._cfg.has_section("ui"):
-            self._cfg.add_section("ui")
-        self._cfg.set("ui", "tree_folder", folder)
-        save_config(self._cfg)
+        # persist tree_folder — re-read conf first to avoid wiping user edits
+        fresh = configparser.ConfigParser()
+        fresh.read(CONFIG_PATH)
+        if not fresh.has_section("ui"):
+            fresh.add_section("ui")
+        fresh.set("ui", "tree_folder", folder)
+        save_config(fresh)
 
         root_label = os.path.basename(folder) or folder
         root_iter  = self._tree_store.append(None, [f"📁 {root_label}", folder])
@@ -598,6 +678,15 @@ class PyraNotesWindow(Gtk.Window):
         self._tree_view.expand_row(
             self._tree_store.get_path(root_iter), False
         )
+
+        # ── start/restart file system monitor ────────────────────────────
+        if self._tree_monitor:
+            self._tree_monitor.cancel()
+        gfile = Gio.File.new_for_path(folder)
+        self._tree_monitor = gfile.monitor_directory(
+            Gio.FileMonitorFlags.WATCH_MOVES, None
+        )
+        self._tree_monitor.connect("changed", self._on_folder_changed)
 
     def _add_tree_children(self, parent_iter, folder):
         """Recursively add dirs then files under parent_iter."""
@@ -617,6 +706,17 @@ class PyraNotesWindow(Gtk.Window):
     def _on_tree_refresh(self, _btn):
         self._populate_tree(self._tree_folder)
         self.log(f"▸ Tree refreshed: {self._tree_folder}")
+
+    def _on_folder_changed(self, _monitor, _file, _other, _event_type):
+        """Debounced auto-refresh: wait 400 ms after last event before redrawing."""
+        if hasattr(self, "_refresh_timer") and self._refresh_timer:
+            GLib.source_remove(self._refresh_timer)
+        self._refresh_timer = GLib.timeout_add(400, self._debounced_tree_refresh)
+
+    def _debounced_tree_refresh(self):
+        self._refresh_timer = None
+        self._populate_tree(self._tree_folder)
+        return False  # don't repeat
 
     def _on_tree_pick_folder(self, _btn):
         dialog = Gtk.FileChooserDialog(
@@ -646,6 +746,7 @@ class PyraNotesWindow(Gtk.Window):
                 display  = basename[:-4] if basename.endswith(".txt") else basename
                 self.filename_entry.set_text(display)
                 self.log(f"▸ Loaded: {fpath}")
+                GLib.idle_add(self.text_view.grab_focus)
             except Exception as e:
                 self.log(f"▸ ERROR loading: {e}")
 
@@ -674,6 +775,16 @@ class PyraNotesWindow(Gtk.Window):
             self.on_save(None)
             return True
 
+        # ── Ctrl+Z — undo ─────────────────────────────────────────────────
+        if ctrl and event.keyval == Gdk.KEY_z:
+            self.on_undo(None)
+            return True
+
+        # ── Ctrl+Y — redo ─────────────────────────────────────────────────
+        if ctrl and event.keyval == Gdk.KEY_y:
+            self.on_redo(None)
+            return True
+
         # ── Ctrl++ / Ctrl+= — text size up ────────────────────────────────
         if ctrl and event.keyval in (Gdk.KEY_plus, Gdk.KEY_equal, Gdk.KEY_KP_Add):
             self.on_text_size_increase(None)
@@ -688,6 +799,49 @@ class PyraNotesWindow(Gtk.Window):
         if event.keyval == Gdk.KEY_Tab:
             self.text_buffer.insert_at_cursor("    ")
             return True
+
+        # ── Auto-close brackets & quotes ──────────────────────────────────
+        _PAIRS = {
+            Gdk.KEY_parenleft:    ("(", ")"),
+            Gdk.KEY_bracketleft:  ("[", "]"),
+            Gdk.KEY_braceleft:    ("{", "}"),
+            Gdk.KEY_apostrophe:   ("'", "'"),
+            Gdk.KEY_quotedbl:     ('"', '"'),
+        }
+        if not ctrl and event.keyval in _PAIRS:
+            open_ch, close_ch = _PAIRS[event.keyval]
+            buf    = self.text_buffer
+            cursor = buf.get_iter_at_mark(buf.get_insert())
+            # if next char is already the closing pair, just skip over it
+            next_iter = cursor.copy()
+            if not next_iter.is_end():
+                next_iter.forward_char()
+                next_ch = buf.get_text(cursor, next_iter, False)
+                if next_ch == close_ch:
+                    buf.place_cursor(next_iter)
+                    return True
+            # insert both chars and place cursor between them
+            buf.insert_at_cursor(open_ch + close_ch)
+            new_cursor = buf.get_iter_at_mark(buf.get_insert())
+            new_cursor.backward_char()
+            buf.place_cursor(new_cursor)
+            return True
+
+        # ── Backspace — remove auto-closed pair if cursor is between them ─
+        if event.keyval == Gdk.KEY_BackSpace:
+            buf    = self.text_buffer
+            cursor = buf.get_iter_at_mark(buf.get_insert())
+            prev   = cursor.copy()
+            if prev.backward_char():
+                nxt = cursor.copy()
+                if not nxt.is_end():
+                    nxt.forward_char()
+                    left  = buf.get_text(prev, cursor, False)
+                    right = buf.get_text(cursor, nxt,    False)
+                    if (left, right) in [("(", ")"), ("[", "]"),
+                                         ("{", "}"), ("'", "'"), ('"', '"')]:
+                        buf.delete(prev, nxt)
+                        return True
 
         # ── Enter — smart indent ──────────────────────────────────────────
         if event.keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
@@ -740,6 +894,32 @@ class PyraNotesWindow(Gtk.Window):
         self.text_size = max(self.text_size - 2, 8)
         self._apply_text_size()
 
+    # ── undo / redo ───────────────────────────────────────────────────────
+
+    def on_undo(self, _item):
+        if len(self._undo_stack) < 2:
+            self.log("▸ Nothing to undo.")
+            return
+        # top of stack is current state — pop it onto redo, restore previous
+        current = self._undo_stack.pop()
+        self._redo_stack.append(current)
+        previous = self._undo_stack[-1]
+        self._undo_inhibit = True
+        self.text_buffer.set_text(previous)
+        self._undo_inhibit = False
+        self.log("▸ Undo")
+
+    def on_redo(self, _item):
+        if not self._redo_stack:
+            self.log("▸ Nothing to redo.")
+            return
+        state = self._redo_stack.pop()
+        self._undo_stack.append(state)
+        self._undo_inhibit = True
+        self.text_buffer.set_text(state)
+        self._undo_inhibit = False
+        self.log("▸ Redo")
+
     # ── log / status ─────────────────────────────────────────────────────
 
     def log(self, msg):
@@ -748,6 +928,46 @@ class PyraNotesWindow(Gtk.Window):
         self.log_buf.insert(end, msg + "\n")
         self.log_view.scroll_to_iter(self.log_buf.get_end_iter(), 0, False, 0, 0)
         self.status.set_text(msg)
+
+    # ── destroy — persist session state ──────────────────────────────────
+
+    def _on_destroy(self, _win):
+        if self._tree_monitor:
+            self._tree_monitor.cancel()
+        # Re-read the conf fresh so any manual edits the user made
+        # (e.g. new highlight groups) are preserved — we only write ui keys on top.
+        fresh = configparser.ConfigParser()
+        fresh.read(CONFIG_PATH)
+        if not fresh.has_section("ui"):
+            fresh.add_section("ui")
+        if self.current_file:
+            fresh.set("ui", "last_file", self.current_file)
+        elif fresh.has_option("ui", "last_file"):
+            fresh.remove_option("ui", "last_file")
+        if self._tree_folder:
+            fresh.set("ui", "tree_folder", self._tree_folder)
+        save_config(fresh)
+        Gtk.main_quit()
+
+    # ── Ctrl+scroll wheel — text size ────────────────────────────────────
+
+    def _on_scroll_zoom(self, widget, event):
+        if event.state & Gdk.ModifierType.CONTROL_MASK:
+            if event.direction == Gdk.ScrollDirection.UP:
+                self.on_text_size_increase(None)
+                return True
+            if event.direction == Gdk.ScrollDirection.DOWN:
+                self.on_text_size_decrease(None)
+                return True
+            # smooth-scroll devices send SMOOTH direction with delta_y
+            if event.direction == Gdk.ScrollDirection.SMOOTH:
+                _, _, dy = event.get_scroll_deltas()
+                if dy < 0:
+                    self.on_text_size_increase(None)
+                elif dy > 0:
+                    self.on_text_size_decrease(None)
+                return True
+        return False
 
     def _filter_executable(self, info, _data):
         """Accept files with no extension (likely bash scripts / executables)."""
@@ -825,22 +1045,43 @@ class PyraNotesWindow(Gtk.Window):
         MODELS_DIR = Path.home() / "cyon" / "piper_models"
         OUTPUT     = str(MODELS_DIR / "voice.wav")
         try:
-            subprocess.run(
+            piper_proc = subprocess.Popen(
                 [
                     PIPER_EXE,
                     "--model",       str(MODELS_DIR / voice_info["model"]),
                     "--config",      str(MODELS_DIR / voice_info["config"]),
                     "--output_file", OUTPUT,
                 ],
-                input=text.encode("utf-8"),
-                check=True,
+                stdin=subprocess.PIPE,
                 stderr=subprocess.DEVNULL,
             )
+            self._tts_procs.append(piper_proc)
+            piper_proc.communicate(input=text.encode("utf-8"))
+            self._tts_procs = [p for p in self._tts_procs if p.poll() is None]
+            if piper_proc.returncode != 0:
+                return
             GLib.idle_add(self.log, f"▸ TTS saved: {OUTPUT}")
-            subprocess.run(["aplay", OUTPUT], check=True, stderr=subprocess.DEVNULL)
+            aplay_proc = subprocess.Popen(
+                ["aplay", OUTPUT], stderr=subprocess.DEVNULL
+            )
+            self._tts_procs.append(aplay_proc)
+            aplay_proc.wait()
+            self._tts_procs = [p for p in self._tts_procs if p.poll() is None]
             GLib.idle_add(self.log, f"▸ TTS playback done.")
         except Exception as e:
             GLib.idle_add(self.log, f"▸ Piper error: {e}")
+
+    def on_tts_stop(self, _btn):
+        if not self._tts_procs:
+            self.log("▸ TTS: nothing running.")
+            return
+        for p in self._tts_procs:
+            try:
+                p.terminate()
+            except Exception:
+                pass
+        self._tts_procs.clear()
+        self.log("▸ TTS stopped.")
 
     # ── file ops ─────────────────────────────────────────────────────────
 
@@ -906,6 +1147,7 @@ class PyraNotesWindow(Gtk.Window):
                 display = basename[:-4] if basename.endswith(".txt") else basename
                 self.filename_entry.set_text(display)
                 self.log(f"▸ Loaded: {path}")
+                GLib.idle_add(self.text_view.grab_focus)
             except Exception as e:
                 self.log(f"▸ ERROR loading: {e}")
         dialog.destroy()
