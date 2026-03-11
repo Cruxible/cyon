@@ -10,10 +10,9 @@ add_path_to_bashrc() {
     START="# >>> Pyra Tool PATH >>>"
     END="# <<< Pyra Tool PATH <<<"
     if ! grep -q "$START" ~/.bashrc; then
-        echo -e "${CYAN}Adding Pyra and cyon/bin directories to PATH in ~/.bashrc${NC}"
+        echo -e "${CYAN}Adding Pyra directories to PATH in ~/.bashrc${NC}"
+        echo "$START" >> ~/.bashrc
         cat >> ~/.bashrc <<'EOF'
-
-$START
 # my additions_____________________________________
 # Cyberpunk cyan color scheme for ls
 LS_COLORS=$LS_COLORS:'di=1;38;5;51:'   # Directories in bold bright cyan
@@ -277,18 +276,20 @@ function start_shell_or_venv() {
 }
 
 start_shell_or_venv
-for dir in "\$HOME/cyon/bin" "\$HOME/cyon/pyra_tool"; do
-    if [ -d "\$dir" ]; then
-        case ":\$PATH:" in
-            *":\$dir:"*) ;;
-            *) PATH="\$PATH:\$dir" ;;
+for dir in "$HOME/cyon/bin" "$HOME/cyon/pyra_tool"; do
+    if [ -d "$dir" ]; then
+        case ":$PATH:" in
+            *":$dir:"*) ;;
+            *) PATH="$PATH:$dir" ;;
         esac
     fi
 done
+export PATH
+done
 echo -e "\033[0;36m executables:\n cyon_cli\n pyra_toolz\n pyra_termux\033[0m"
 export PATH
-$END
 EOF
+        echo "$END" >> ~/.bashrc
     else
         echo -e "${CYAN}Pyra PATH already exists in ~/.bashrc${NC}"
     fi
@@ -397,15 +398,17 @@ compile_cyon_notes() {
     mkdir -p ~/.local/share/applications
     tee ~/.local/share/applications/cyon_notes.desktop > /dev/null <<EOF
 [Desktop Entry]
+Version=1.0
 Type=Application
 Encoding=UTF-8
 Name=Cyon Notes
-Comment=Cyon DE
-Exec=$SCRIPT_DIR/bin/cyon_notes
+Comment=Cyon Notes editor with TTS
+Exec=$SCRIPT_DIR/bin/cyon_notes %F
 Icon=$SCRIPT_DIR/bin/cyon.png
-#Icon=$SCRIPT_DIR/bin/main_cyon.webp
 Terminal=false
-Categories=Application;
+Categories=TextEditor;Utility;
+MimeType=text/plain;text/x-csrc;text/x-chdr;text/markdown;text/x-log;text/x-python;text/x-shellscript;
+StartupNotify=false
 EOF
     
     update-desktop-database ~/.local/share/applications
