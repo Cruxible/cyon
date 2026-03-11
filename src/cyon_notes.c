@@ -235,6 +235,11 @@ typedef struct {
     gboolean       undo_inhibit;
     gboolean       is_dirty;      /* unsaved changes */
 
+    /* debounce: defer expensive work after rapid input (e.g. large paste) */
+    guint          hl_timer;      /* pending highlight timeout id, 0=none */
+    guint          undo_timer;    /* pending undo snapshot timeout id, 0=none */
+    int            last_line_count; /* for cheap line-number change detection */
+
     AppState      *app;           /* back-pointer */
 } EditorTab;
 
@@ -248,7 +253,6 @@ struct _AppState {
     GtkWidget     *log_view;
     GtkTextBuffer *log_buf;
     GtkWidget     *file_menu;
-    GtkWidget     *tree_toggle_item;  /* for label update — stage 2 */
 
     int            font_size;         /* current px */
     GtkCssProvider *size_provider;
@@ -268,6 +272,10 @@ struct _AppState {
     GPid           tts_pid;         /* currently running piper pid, 0=none */
     gboolean       tts_voice_joe;   /* TRUE=joe (male), FALSE=lessac (female) */
     GtkWidget     *tts_menu;        /* popup */
+    char          *tts_piper_path;
+    char          *tts_model_dir;
+    char          *tts_model_joe;
+    char          *tts_model_lessac;
 
     /* cursor pos label */
     GtkWidget     *cursor_label;
@@ -281,10 +289,24 @@ struct _AppState {
     GFileMonitor  *tree_monitor;
     guint          tree_refresh_timer;
     gboolean       tree_save_in_progress;  /* suppress monitor during save */
+
+    /* layout — saved/restored */
+    GtkWidget     *paned;           /* main h-paned for tree position */
+
+    /* startup config scratch — used between app_load_config and build_ui */
+    gboolean       _cfg_tree_visible;
+    gint           _cfg_pane_pos;
+    gint           _cfg_win_w;
+    gint           _cfg_win_h;
+    gint           last_win_w;   /* updated live via configure-event */
+    gint           last_win_h;
+    char          *_cfg_notes_dir;
+    gchar        **_cfg_open_files;
+    int            _cfg_open_files_n;
+    int            _cfg_active_tab;
 };
 
 
-/* ── forward declarations ───────────────────────────────────────────────── */
 /* ── forward declarations ───────────────────────────────────────────────── */
 
 static EditorTab *app_current_tab(AppState *app);
@@ -429,18 +451,60 @@ static void tab_mark_clean(EditorTab *tab) {
     tab->is_dirty = FALSE;
 }
 
+/* ── debounced highlight callback ───────────────────────────────────────── */
+
+static gboolean hl_deferred_cb(EditorTab *tab) {
+    tab->hl_timer = 0;
+    hl_apply(tab->app, tab->text_buf);
+    return G_SOURCE_REMOVE;
+}
+
+/* ── debounced undo snapshot callback ──────────────────────────────────── */
+
+static gboolean undo_deferred_cb(EditorTab *tab) {
+    tab->undo_timer = 0;
+    GtkTextIter s, e;
+    gtk_text_buffer_get_bounds(tab->text_buf, &s, &e);
+    char *snap = gtk_text_buffer_get_text(tab->text_buf, &s, &e, FALSE);
+    undo_stack_push(&tab->undo_stack, snap);
+    undo_stack_clear(&tab->redo_stack);
+    g_free(snap);
+    return G_SOURCE_REMOVE;
+}
+
 static void on_text_changed(GtkTextBuffer *buf, EditorTab *tab) {
     if (!tab->undo_inhibit) {
-        GtkTextIter s, e;
-        gtk_text_buffer_get_bounds(buf, &s, &e);
-        char *snap = gtk_text_buffer_get_text(buf, &s, &e, FALSE);
-        undo_stack_push(&tab->undo_stack, snap);
-        undo_stack_clear(&tab->redo_stack);
-        g_free(snap);
         tab->is_dirty = TRUE;
+
+        /* Undo snapshot: only schedule if none is pending. The timer fires
+         * 500 ms after the FIRST change in a burst — no cancel/reschedule
+         * overhead on every keypress. */
+        if (!tab->undo_timer)
+            tab->undo_timer = g_timeout_add(500, (GSourceFunc)undo_deferred_cb, tab);
     }
-    hl_apply(tab->app, buf);
-    tab_update_line_numbers(tab);
+
+    /* Highlight: schedule once per burst, fire 300 ms after the first change.
+     * No cancel/reschedule — the timer just coalesces the whole burst into
+     * one regex pass. Fast typing never re-arms it mid-burst. */
+    if (!tab->hl_timer)
+        tab->hl_timer = g_timeout_add(300, (GSourceFunc)hl_deferred_cb, tab);
+
+    /* Line numbers: only rebuild when line count changes — cheap O(1) check. */
+    int new_count = gtk_text_buffer_get_line_count(buf);
+    if (new_count != tab->last_line_count) {
+        tab->last_line_count = new_count;
+        tab_update_line_numbers(tab);
+    }
+}
+
+/* ── scroll restore helper ──────────────────────────────────────────────── */
+
+typedef struct { GtkAdjustment *adj; gdouble val; } ScrollRestore;
+
+static gboolean restore_scroll_cb(ScrollRestore *sr) {
+    gtk_adjustment_set_value(sr->adj, sr->val);
+    g_free(sr);
+    return G_SOURCE_REMOVE;
 }
 
 /* ── tab_load_file ──────────────────────────────────────────────────────── */
@@ -484,10 +548,10 @@ static void tab_load_file(EditorTab *tab, const char *path) {
     app_log(tab->app, "▸ Loaded: %s", path);
 
     /* restore scroll asynchronously to avoid jump */
-    g_idle_add((GSourceFunc) (void*) ({
-        gtk_adjustment_set_value(vadj, scroll_pos);
-        NULL;
-    }), NULL);
+    ScrollRestore *sr = g_new(ScrollRestore, 1);
+    sr->adj = vadj;
+    sr->val = scroll_pos;
+    g_idle_add((GSourceFunc)restore_scroll_cb, sr);
 }
 
 /* ── confirm close (unsaved changes dialog) ─────────────────────────────── */
@@ -543,6 +607,9 @@ static EditorTab *tab_new(AppState *app, const char *path) {
     tab->current_file = NULL;
     tab->undo_inhibit = FALSE;
     tab->is_dirty     = FALSE;
+    tab->hl_timer     = 0;
+    tab->undo_timer   = 0;
+    tab->last_line_count = 0;
     undo_stack_init(&tab->undo_stack);
     undo_stack_init(&tab->redo_stack);
 
@@ -622,14 +689,7 @@ static EditorTab *tab_new(AppState *app, const char *path) {
 
     /* ── load file and preserve scroll ── */
     if (path) {
-        /* save current scroll */
-        GtkAdjustment *scroll_adj = gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(tab->scroll));
-        gdouble scroll_val = gtk_adjustment_get_value(scroll_adj);
-
-        tab_load_file(tab, path);  /* your existing file loader */
-
-        /* restore scroll */
-        gtk_adjustment_set_value(scroll_adj, scroll_val);
+        tab_load_file(tab, path);
     }
 
     gtk_notebook_set_current_page(GTK_NOTEBOOK(app->notebook), page_idx);
@@ -671,6 +731,9 @@ static void on_tab_close_clicked(GtkButton *btn, GtkWidget *page) {
     } else {
         gint idx = gtk_notebook_page_num(GTK_NOTEBOOK(app->notebook), page);
         gtk_notebook_remove_page(GTK_NOTEBOOK(app->notebook), idx);
+        /* cancel any pending debounce timers before freeing */
+        if (tab->hl_timer)   { g_source_remove(tab->hl_timer);   tab->hl_timer   = 0; }
+        if (tab->undo_timer) { g_source_remove(tab->undo_timer); tab->undo_timer = 0; }
         /* free the tab */
         undo_stack_free(&tab->undo_stack);
         undo_stack_free(&tab->redo_stack);
@@ -1167,17 +1230,12 @@ static gboolean on_key_press(GtkWidget *w, GdkEventKey *ev, AppState *app) {
         g_free(line_text);
 
         int total = base_indent + (add_indent ? 4 : 0);
-        char *indent = g_strnfill(total + 1, ' ');
-        indent[0] = '\n';
-        for (int i = 1; i <= total; i++) indent[i] = ' ';
-        indent[total + 1] = '\0';  /* wait, g_strnfill NUL-terminates */
 
         /* build "\n" + spaces */
         GString *ins = g_string_new("\n");
         for (int i = 0; i < total; i++) g_string_append_c(ins, ' ');
         gtk_text_buffer_insert_at_cursor(buf, ins->str, -1);
         g_string_free(ins, TRUE);
-        g_free(indent);
         return TRUE;
     }
 
@@ -1210,7 +1268,7 @@ static const char *HL_DEFAULT_CONF =
     "color = #ffb000\n"
     "\n"
     "[highlight_group_2]\n"
-    "keywords = def class import from as lambda global nonlocal del expanduser join append extend insert pop update get items keys values function source export alias unset\n"
+    "keywords = def class import from as lambda global nonlocal del\n"
     "color = #5fd7ff\n"
     "\n"
     "[highlight_group_3]\n"
@@ -1226,30 +1284,38 @@ static const char *HL_DEFAULT_CONF =
     "color = #ff88ff\n"
     "\n"
     "[highlight_group_6]\n"
-    "keywords = len range open map filter list dict set tuple int float str bool type isinstance enumerate zip sorted reversed sum min max abs round hasattr getattr setattr callable gboolean gint gchar GtkWidget GtkWindow GtkBox GtkButton GtkLabel\n"
+    "keywords = len range open map filter list dict set tuple int float str bool type isinstance enumerate zip sorted reversed sum min max abs round hasattr getattr setattr callable\n"
     "color = #00ffaa\n"
     "\n"
     "[highlight_group_7]\n"
+    "keywords = gboolean gint gchar GtkWidget GtkWindow GtkBox GtkButton GtkLabel\n"
+    "color = #8fd3ff\n"
+    "\n"
+    "[highlight_group_8]\n"
+    "keywords = expanduser join append extend insert pop update get items keys values function source export alias unset\n"
+    "color = #5fd7ff\n"
+    "\n"
+    "[highlight_group_9]\n"
     "keywords = and or not in is\n"
     "color = #ffd700\n"
     "\n"
-    "[highlight_group_8]\n"
+    "[highlight_group_10]\n"
     "keywords = os sys subprocess pathlib read write mkdir remove rename chmod chown stat glob shutil copy move cd ls cat grep sed awk find ps kill sudo apt git\n"
     "color = #00eaff\n"
     "\n"
-    "[highlight_group_9]\n"
+    "[highlight_group_11]\n"
     "keywords = eval exec compile __import__ malloc free calloc realloc goto\n"
     "color = #ff5555\n"
     "\n"
-    "[highlight_group_10]\n"
+    "[highlight_group_12]\n"
     "keywords = breakpoint help dir vars globals locals __name__ __file__ __doc__ __all__ __init__ __main__\n"
     "color = #c792ea\n"
     "\n"
-    "[highlight_group_11]\n"
+    "[highlight_group_13]\n"
     "keywords = void static const char unsigned signed long short struct union enum typedef extern inline auto register volatile restrict\n"
     "color = #8fd3ff\n"
     "\n"
-    "[highlight_group_12]\n"
+    "[highlight_group_14]\n"
     "keywords = include define ifdef ifndef endif pragma undef\n"
     "color = #ffb347\n"
     "\n"
@@ -1287,11 +1353,9 @@ static void hl_ensure_config(const char *path) {
 }
 
 static GtkTextTag *make_tag(GtkTextBuffer *buf, const char *color) {
-    /* Use a shared tag table on a dummy buffer so all tab buffers can share
-     * the same tag objects via the tag table. For simplicity we create tags
-     * on a provided buffer — each tab buffer gets its own set. Since we only
-     * call hl_apply from on_text_changed (which passes the current tab's
-     * buffer), we store tags on AppState and they apply to any buffer. */
+    /* Create a named-NULL tag on the given buffer with the specified foreground
+     * color. Tags are stored on AppState and applied to any tab buffer via the
+     * shared tag table (g_shared_tags). */
     return gtk_text_buffer_create_tag(buf, NULL, "foreground", color, NULL);
 }
 
@@ -1432,10 +1496,11 @@ static void hl_load_config(AppState *app) {
     g_key_file_free(kf);
 }
 
-/* Apply a tag to all matches of a GRegex in text, using the given buffer */
+/* Apply a tag to all matches of a GRegex in a text slice.
+ * base_offset: character offset in the buffer where `text` begins. */
 static void hl_apply_regex(GtkTextBuffer *buf, GRegex *re,
                             GtkTextTag *tag, const char *text,
-                            int group) {
+                            int group, gint base_offset) {
     if (!re || !tag) return;
     GMatchInfo *mi = NULL;
     g_regex_match(re, text, 0, &mi);
@@ -1443,9 +1508,8 @@ static void hl_apply_regex(GtkTextBuffer *buf, GRegex *re,
         gint s, e;
         g_match_info_fetch_pos(mi, group, &s, &e);
         if (s >= 0 && e > s) {
-            /* fetch_pos returns byte offsets; convert to char offsets for GTK */
-            glong cs = g_utf8_pointer_to_offset(text, text + s);
-            glong ce = g_utf8_pointer_to_offset(text, text + e);
+            glong cs = base_offset + g_utf8_pointer_to_offset(text, text + s);
+            glong ce = base_offset + g_utf8_pointer_to_offset(text, text + e);
             GtkTextIter si, ei;
             gtk_text_buffer_get_iter_at_offset(buf, &si, (gint)cs);
             gtk_text_buffer_get_iter_at_offset(buf, &ei, (gint)ce);
@@ -1459,10 +1523,39 @@ static void hl_apply_regex(GtkTextBuffer *buf, GRegex *re,
 static void hl_apply(AppState *app, GtkTextBuffer *buf) {
     if (!app->hl_tag_comment) return;  /* not loaded yet */
 
-    GtkTextIter s, e;
-    gtk_text_buffer_get_bounds(buf, &s, &e);
+    /* ── Only highlight the visible region + a small margin.
+     *    Scanning the whole buffer is O(n) in doc size; the visible
+     *    window is effectively O(1) regardless of file length.       ── */
+    EditorTab *tab = NULL;
+    {
+        int n = gtk_notebook_get_n_pages(GTK_NOTEBOOK(app->notebook));
+        for (int i = 0; i < n && !tab; i++) {
+            GtkWidget *pg = gtk_notebook_get_nth_page(GTK_NOTEBOOK(app->notebook), i);
+            EditorTab *t  = g_object_get_data(G_OBJECT(pg), "editor-tab");
+            if (t && t->text_buf == buf) tab = t;
+        }
+    }
 
-    /* clear all tags first */
+    GtkTextIter s, e;
+    if (tab && tab->text_view) {
+        GdkRectangle vis;
+        gtk_text_view_get_visible_rect(GTK_TEXT_VIEW(tab->text_view), &vis);
+        /* 10-line margin so scrolling doesn't show unhighlighted text */
+        int margin = MAX(vis.height / 3, 200);
+        int top_y    = MAX(0, vis.y - margin);
+        int bottom_y = vis.y + vis.height + margin;
+        gtk_text_view_get_iter_at_location(GTK_TEXT_VIEW(tab->text_view), &s, vis.x, top_y);
+        gtk_text_view_get_iter_at_location(GTK_TEXT_VIEW(tab->text_view), &e, vis.x, bottom_y);
+        gtk_text_iter_set_line_offset(&s, 0);
+        if (!gtk_text_iter_ends_line(&e))
+            gtk_text_iter_forward_to_line_end(&e);
+    } else {
+        gtk_text_buffer_get_bounds(buf, &s, &e);
+    }
+
+    gint base_offset = gtk_text_iter_get_offset(&s);
+
+    /* clear tags only in the region we are about to repaint */
     for (int i = 0; i < app->hl_group_count; i++)
         if (app->hl_kw_tags[i])
             gtk_text_buffer_remove_tag(buf, app->hl_kw_tags[i], &s, &e);
@@ -1488,8 +1581,8 @@ static void hl_apply(AppState *app, GtkTextBuffer *buf) {
             g_match_info_fetch_pos(mi, 2, &cs, &ce);  // only the inner string
             if (cs >= 0 && ce > cs) {
                 GtkTextIter si, ei;
-                glong ccs = g_utf8_pointer_to_offset(text, text + cs);
-                glong cce = g_utf8_pointer_to_offset(text, text + ce);
+                glong ccs = base_offset + g_utf8_pointer_to_offset(text, text + cs);
+                glong cce = base_offset + g_utf8_pointer_to_offset(text, text + ce);
                 gtk_text_buffer_get_iter_at_offset(buf, &si, (gint)ccs);
                 gtk_text_buffer_get_iter_at_offset(buf, &ei, (gint)cce);
                 gtk_text_buffer_apply_tag(buf, app->hl_tag_coral, &si, &ei);
@@ -1501,27 +1594,27 @@ static void hl_apply(AppState *app, GtkTextBuffer *buf) {
 
     /* 2) keyword groups — lowest priority */
     for (int i = 0; i < app->hl_group_count; i++)
-        hl_apply_regex(buf, app->hl_kw_regex[i], app->hl_kw_tags[i], text, 1);
+        hl_apply_regex(buf, app->hl_kw_regex[i], app->hl_kw_tags[i], text, 1, base_offset);
 
     /* 3) steel: standalone = operator */
     {
         static GRegex *re_eq = NULL;
         if (!re_eq) re_eq = g_regex_new("(?<![=!<>])=(?!=)", G_REGEX_OPTIMIZE, 0, NULL);
-        hl_apply_regex(buf, re_eq, app->hl_tag_steel, text, 0);
+        hl_apply_regex(buf, re_eq, app->hl_tag_steel, text, 0, base_offset);
     }
 
     /* 4) steel: @staticmethod */
     {
         static GRegex *re_sm = NULL;
         if (!re_sm) re_sm = g_regex_new("@staticmethod(?!\\w)", G_REGEX_OPTIMIZE, 0, NULL);
-        hl_apply_regex(buf, re_sm, app->hl_tag_steel, text, 0);
+        hl_apply_regex(buf, re_sm, app->hl_tag_steel, text, 0, base_offset);
     }
 
     /* 5) lime: class name after 'class' */
     {
         static GRegex *re_cls = NULL;
         if (!re_cls) re_cls = g_regex_new("(?<!\\w)class\\s+(\\w+)", G_REGEX_OPTIMIZE, 0, NULL);
-        hl_apply_regex(buf, re_cls, app->hl_tag_lime, text, 1);
+        hl_apply_regex(buf, re_cls, app->hl_tag_lime, text, 1, base_offset);
     }
 
     /* 6) dot notation: obj.method — strict word boundaries */
@@ -1537,16 +1630,16 @@ static void hl_apply(AppState *app, GtkTextBuffer *buf) {
 
             if (ls >= 0 && le > ls) {
                 GtkTextIter a, b;
-                glong cls = g_utf8_pointer_to_offset(text, text + ls);
-                glong cle = g_utf8_pointer_to_offset(text, text + le);
+                glong cls = base_offset + g_utf8_pointer_to_offset(text, text + ls);
+                glong cle = base_offset + g_utf8_pointer_to_offset(text, text + le);
                 gtk_text_buffer_get_iter_at_offset(buf, &a, (gint)cls);
                 gtk_text_buffer_get_iter_at_offset(buf, &b, (gint)cle);
                 gtk_text_buffer_apply_tag(buf, app->hl_tag_dot_l, &a, &b);
             }
             if (rs >= 0 && re2 > rs) {
                 GtkTextIter a, b;
-                glong crs = g_utf8_pointer_to_offset(text, text + rs);
-                glong cre = g_utf8_pointer_to_offset(text, text + re2);
+                glong crs = base_offset + g_utf8_pointer_to_offset(text, text + rs);
+                glong cre = base_offset + g_utf8_pointer_to_offset(text, text + re2);
                 gtk_text_buffer_get_iter_at_offset(buf, &a, (gint)crs);
                 gtk_text_buffer_get_iter_at_offset(buf, &b, (gint)cre);
                 gtk_text_buffer_apply_tag(buf, app->hl_tag_dot_r, &a, &b);
@@ -1561,7 +1654,7 @@ static void hl_apply(AppState *app, GtkTextBuffer *buf) {
     {
         static GRegex *re_cmt = NULL;
         if (!re_cmt) re_cmt = g_regex_new("(#[^\n]*|//[^\n]*)", G_REGEX_OPTIMIZE, 0, NULL);
-        hl_apply_regex(buf, re_cmt, app->hl_tag_comment, text, 0);
+        hl_apply_regex(buf, re_cmt, app->hl_tag_comment, text, 0, base_offset);
     }
 
     g_free(text);
@@ -1615,14 +1708,17 @@ static void tts_run(AppState *app, const char *text) {
         app->tts_pid = 0;
     }
 
-    /* piper executable path */
-    const char *piper_path = "/home/cruxible/pyra_env/bin/piper";
+    /* piper executable and voice model from config */
+    const char *piper_path = app->tts_piper_path
+        ? app->tts_piper_path : "/home/cruxible/pyra_env/bin/piper";
+    const char *model_dir  = app->tts_model_dir
+        ? app->tts_model_dir  : "/home/cruxible/cyon/piper_models";
+    const char *model_file = app->tts_voice_joe
+        ? (app->tts_model_joe    ? app->tts_model_joe    : "en_US-joe-medium.onnx")
+        : (app->tts_model_lessac ? app->tts_model_lessac : "en_US-lessac-medium.onnx");
 
-    /* choose voice model and make full path */
     char voice_model[PATH_MAX];
-    snprintf(voice_model, sizeof(voice_model),
-             "/home/cruxible/cyon/piper_models/%s",
-             app->tts_voice_joe ? "en_US-joe-medium.onnx" : "en_US-lessac-medium.onnx");
+    snprintf(voice_model, sizeof(voice_model), "%s/%s", model_dir, model_file);
 
     /* escape the text for shell */
     char *safe_text = g_shell_quote(text);
@@ -1780,12 +1876,163 @@ static void duplicate_line(AppState *app) {
     g_free(text);
 }
 
+static void on_destroy(GtkWidget *w, AppState *app);  /* forward */
+
+/* ── app_load_config ────────────────────────────────────────────────────── */
+
+static void app_load_config(AppState *app) {
+    char *path = get_config_path();
+
+    GKeyFile *kf  = g_key_file_new();
+    GError   *err = NULL;
+    g_key_file_load_from_file(kf, path, G_KEY_FILE_NONE, &err);
+    if (err) { g_error_free(err); err = NULL; }
+    g_free(path);
+
+    /* ── [editor] ── */
+    gint font = g_key_file_get_integer(kf, "editor", "font_size", &err);
+    if (!err && font >= MIN_FONT_PX && font <= MAX_FONT_PX)
+        app->font_size = font;
+    else { g_clear_error(&err); }
+
+    /* tree_visible and pane position applied later in build_ui after widgets exist */
+    /* stored on app so build_ui can read them */
+    app->_cfg_tree_visible  = !g_key_file_get_boolean(kf, "editor", "tree_hidden", NULL);
+    gint pane_pos = g_key_file_get_integer(kf, "editor", "tree_pane_position", &err);
+    app->_cfg_pane_pos = (!err && pane_pos > 0) ? pane_pos : 600;
+    g_clear_error(&err);
+
+    gint win_w = g_key_file_get_integer(kf, "editor", "window_width",  &err); g_clear_error(&err);
+    gint win_h = g_key_file_get_integer(kf, "editor", "window_height", &err); g_clear_error(&err);
+    app->_cfg_win_w = (win_w > 200) ? win_w : 900;
+    app->_cfg_win_h = (win_h > 200) ? win_h : 660;
+
+    /* ── [tts] ── */
+    char *pp = g_key_file_get_string(kf, "tts", "piper_path", NULL);
+    app->tts_piper_path = (pp && pp[0]) ? pp : g_strdup("/home/cruxible/pyra_env/bin/piper");
+
+    char *md = g_key_file_get_string(kf, "tts", "model_dir", NULL);
+    app->tts_model_dir = (md && md[0]) ? md : g_strdup("/home/cruxible/cyon/piper_models");
+
+    char *mj = g_key_file_get_string(kf, "tts", "voice_joe_model", NULL);
+    app->tts_model_joe = (mj && mj[0]) ? mj : g_strdup("en_US-joe-medium.onnx");
+
+    char *ml = g_key_file_get_string(kf, "tts", "voice_lessac_model", NULL);
+    app->tts_model_lessac = (ml && ml[0]) ? ml : g_strdup("en_US-lessac-medium.onnx");
+
+    char *voice = g_key_file_get_string(kf, "tts", "voice", NULL);
+    if (voice && strcmp(voice, "lessac") == 0) app->tts_voice_joe = FALSE;
+    g_free(voice);
+
+    /* ── [session] ── */
+    char *notes_dir_cfg = g_key_file_get_string(kf, "session", "notes_dir", NULL);
+    if (notes_dir_cfg && notes_dir_cfg[0]) {
+        /* expand leading ~ */
+        if (notes_dir_cfg[0] == '~') {
+            const char *home = g_get_home_dir();
+            app->_cfg_notes_dir = g_strconcat(home, notes_dir_cfg + 1, NULL);
+            g_free(notes_dir_cfg);
+        } else {
+            app->_cfg_notes_dir = notes_dir_cfg;
+        }
+    } else {
+        g_free(notes_dir_cfg);
+        app->_cfg_notes_dir = NULL;
+    }
+
+    gsize  n_files = 0;
+    gchar **open_files = g_key_file_get_string_list(kf, "session", "open_files", &n_files, NULL);
+    app->_cfg_open_files   = open_files;
+    app->_cfg_open_files_n = (int)n_files;
+
+    gint active = g_key_file_get_integer(kf, "session", "active_tab", &err);
+    app->_cfg_active_tab = (!err && active >= 0) ? active : 0;
+    g_clear_error(&err);
+
+    g_key_file_free(kf);
+}
+
+/* ── app_save_session ───────────────────────────────────────────────────── */
+
+static void app_save_session(AppState *app) {
+    char *path = get_config_path();
+
+    /* load existing file so we preserve highlight sections */
+    GKeyFile *kf  = g_key_file_new();
+    GError   *err = NULL;
+    g_key_file_load_from_file(kf, path, G_KEY_FILE_NONE, &err);
+    if (err) { g_error_free(err); err = NULL; }
+
+    /* ── [editor] ── */
+    g_key_file_set_integer(kf, "editor", "font_size", app->font_size);
+
+    gboolean tree_vis = gtk_widget_get_visible(app->tree_panel);
+    g_key_file_set_boolean(kf, "editor", "tree_hidden", !tree_vis);
+
+    if (app->paned)
+        g_key_file_set_integer(kf, "editor", "tree_pane_position",
+                               gtk_paned_get_position(GTK_PANED(app->paned)));
+
+    gint win_w = (app->last_win_w >= 800) ? app->last_win_w : 900;
+    gint win_h = (app->last_win_h >= 300) ? app->last_win_h : 660;
+    g_key_file_set_integer(kf, "editor", "window_width",  win_w);
+    g_key_file_set_integer(kf, "editor", "window_height", win_h);
+
+    /* ── [tts] ── */
+    if (app->tts_piper_path)   g_key_file_set_string(kf, "tts", "piper_path",        app->tts_piper_path);
+    if (app->tts_model_dir)    g_key_file_set_string(kf, "tts", "model_dir",          app->tts_model_dir);
+    if (app->tts_model_joe)    g_key_file_set_string(kf, "tts", "voice_joe_model",    app->tts_model_joe);
+    if (app->tts_model_lessac) g_key_file_set_string(kf, "tts", "voice_lessac_model", app->tts_model_lessac);
+    g_key_file_set_string(kf, "tts", "voice", app->tts_voice_joe ? "joe" : "lessac");
+
+    /* ── [session] ── */
+    /* notes dir — use tree_folder if set, else default */
+    const char *ndir = app->tree_folder ? app->tree_folder : "";
+    g_key_file_set_string(kf, "session", "notes_dir", ndir);
+
+    /* collect open file paths from all tabs */
+    int n_pages = gtk_notebook_get_n_pages(GTK_NOTEBOOK(app->notebook));
+    GPtrArray *files = g_ptr_array_new();
+    for (int i = 0; i < n_pages; i++) {
+        GtkWidget *page = gtk_notebook_get_nth_page(GTK_NOTEBOOK(app->notebook), i);
+        EditorTab *tab  = g_object_get_data(G_OBJECT(page), "editor-tab");
+        if (tab && tab->current_file)
+            g_ptr_array_add(files, tab->current_file);
+    }
+    if (files->len > 0)
+        g_key_file_set_string_list(kf, "session", "open_files",
+                                   (const gchar *const *)files->pdata, files->len);
+    else
+        g_key_file_set_string_list(kf, "session", "open_files", NULL, 0);
+    g_ptr_array_free(files, FALSE);
+
+    gint active_idx = gtk_notebook_get_current_page(GTK_NOTEBOOK(app->notebook));
+    g_key_file_set_integer(kf, "session", "active_tab", active_idx);
+
+    /* write back */
+    gsize  len  = 0;
+    gchar *data = g_key_file_to_data(kf, &len, NULL);
+    if (data) {
+        g_file_set_contents(path, data, (gssize)len, NULL);
+        g_free(data);
+    }
+    g_key_file_free(kf);
+    g_free(path);
+}
+
+/* ── on_destroy ─────────────────────────────────────────────────────────── */
+
 static void on_destroy(GtkWidget *w, AppState *app) {
     if (app->tts_pid) {
         kill(app->tts_pid, SIGTERM);
         g_spawn_close_pid(app->tts_pid);
     }
+    app_save_session(app);
     g_free(app->tree_folder);
+    g_free(app->tts_piper_path);
+    g_free(app->tts_model_dir);
+    g_free(app->tts_model_joe);
+    g_free(app->tts_model_lessac);
     release_lock();
     gtk_main_quit();
 }
@@ -1980,13 +2227,29 @@ static void on_tree_toggle(GtkMenuItem *item, AppState *app) {
     }
 }
 
+static gboolean on_window_configure(GtkWidget *w, GdkEventConfigure *ev,
+                                    AppState *app) {
+    /* cache the live window size — used by app_save_session on exit */
+    app->last_win_w = ev->width;
+    app->last_win_h = ev->height;
+    return FALSE;  /* propagate */
+}
+
 static void build_ui(AppState *app) {
     /* ── window ───────────────────────────────────────────────────── */
     app->window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_title(GTK_WINDOW(app->window), APP_TITLE);
-    gtk_window_set_default_size(GTK_WINDOW(app->window), 900, 660);
+
+    gint init_w = (app->_cfg_win_w >= 800) ? app->_cfg_win_w : 900;
+    gint init_h = (app->_cfg_win_h >= 300) ? app->_cfg_win_h : 660;
+    gtk_window_set_default_size(GTK_WINDOW(app->window), init_w, init_h);
+    app->last_win_w = init_w;
+    app->last_win_h = init_h;
+
     gtk_container_set_border_width(GTK_CONTAINER(app->window), 10);
     g_signal_connect(app->window, "destroy", G_CALLBACK(on_destroy), app);
+    g_signal_connect(app->window, "configure-event",
+                     G_CALLBACK(on_window_configure), app);
 
     /* ── CSS ──────────────────────────────────────────────────────── */
     GtkCssProvider *provider = gtk_css_provider_new();
@@ -2151,9 +2414,11 @@ static void build_ui(AppState *app) {
 
     /* ── paned: notebook left, tree right ────────────────────────── */
     GtkWidget *paned = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
+    app->paned = paned;
     gtk_paned_pack1(GTK_PANED(paned), app->notebook,   TRUE,  TRUE);
     gtk_paned_pack2(GTK_PANED(paned), app->tree_panel, FALSE, FALSE);
-    gtk_paned_set_position(GTK_PANED(paned), 600);
+    gtk_paned_set_position(GTK_PANED(paned),
+        app->_cfg_pane_pos > 0 ? app->_cfg_pane_pos : 600);
     gtk_box_pack_start(GTK_BOX(outer), paned, TRUE, TRUE, 0);
 
     gtk_box_pack_start(GTK_BOX(outer),
@@ -2187,15 +2452,46 @@ static void build_ui(AppState *app) {
     /* load syntax highlighting config */
     hl_load_config(app);
 
-    /* ── open initial blank tab ───────────────────────────────────── */
-    tab_new(app, NULL);
-    /* populate tree with notes dir */
-    app->tree_folder = NULL;
-    app->tree_monitor = NULL;
+    /* ── restore session ─────────────────────────────────────────── */
+    /* notes dir: prefer conf value, fall back to default */
+    char *start_dir = app->_cfg_notes_dir
+        ? g_strdup(app->_cfg_notes_dir) : get_notes_dir();
+
+    /* open last files, or a blank tab if none */
+    if (app->_cfg_open_files && app->_cfg_open_files_n > 0) {
+        for (int i = 0; i < app->_cfg_open_files_n; i++) {
+            const char *f = app->_cfg_open_files[i];
+            if (f && f[0] && g_file_test(f, G_FILE_TEST_EXISTS))
+                tab_new(app, f);
+        }
+        /* if all files were missing, open a blank tab */
+        if (gtk_notebook_get_n_pages(GTK_NOTEBOOK(app->notebook)) == 0)
+            tab_new(app, NULL);
+        /* restore active tab */
+        gint n_pages = gtk_notebook_get_n_pages(GTK_NOTEBOOK(app->notebook));
+        gint active  = app->_cfg_active_tab;
+        if (active >= 0 && active < n_pages)
+            gtk_notebook_set_current_page(GTK_NOTEBOOK(app->notebook), active);
+    } else {
+        tab_new(app, NULL);
+    }
+    g_strfreev(app->_cfg_open_files);
+    app->_cfg_open_files = NULL;
+
+    /* populate tree */
+    app->tree_monitor      = NULL;
     app->tree_refresh_timer = 0;
-    char *nd = get_notes_dir();
-    tree_populate(app, nd);
-    g_free(nd);
+    tree_populate(app, start_dir);
+    g_free(start_dir);
+    g_free(app->_cfg_notes_dir);
+    app->_cfg_notes_dir = NULL;
+
+    /* restore tree visibility */
+    if (!app->_cfg_tree_visible) {
+        gtk_widget_hide(app->tree_panel);
+        gtk_menu_item_set_label(
+            GTK_MENU_ITEM(app->tree_toggle_item_widget), "SHOW TREE");
+    }
 
     app_log(app, "▸ Ready.");
 }
@@ -2221,6 +2517,7 @@ int main(int argc, char **argv) {
     app->tts_pid       = 0;
     app->tts_voice_joe = TRUE;
 
+    app_load_config(app);
     build_ui(app);
 
     gtk_main();
