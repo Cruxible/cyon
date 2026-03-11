@@ -131,6 +131,7 @@ static const char *APP_CSS =
 "}"
 ".tab-close-btn:hover { color: #ff4444; border-color: #E8A020; }"
 
+
     ".tree-panel {"
     "  background-color: #080810;"
     "  border-left: 1px solid #1a2a20;"
@@ -240,6 +241,10 @@ typedef struct {
     guint          undo_timer;    /* pending undo snapshot timeout id, 0=none */
     int            last_line_count; /* for cheap line-number change detection */
 
+    /* dirty-line tracking for incremental highlight */
+    GArray        *dirty_lines;   /* sorted array of gint line numbers */
+    gboolean       hl_full_pending; /* full rehighlight needed (e.g. load) */
+
     AppState      *app;           /* back-pointer */
 } EditorTab;
 
@@ -267,6 +272,8 @@ struct _AppState {
     GtkTextTag    *hl_tag_dot_l;
     GtkTextTag    *hl_tag_dot_r;
     GtkTextTag    *hl_tag_steel; /* = operator, @staticmethod */
+    gboolean       hl_enabled;   /* syntax highlighting on/off */
+    GtkWidget     *hl_btn;       /* the toolbar toggle button */
 
     /* TTS */
     GPid           tts_pid;         /* currently running piper pid, 0=none */
@@ -289,6 +296,18 @@ struct _AppState {
     GFileMonitor  *tree_monitor;
     guint          tree_refresh_timer;
     gboolean       tree_save_in_progress;  /* suppress monitor during save */
+
+    /* RAM graph */
+    GtkWidget     *ram_graph;       /* GtkDrawingArea */
+    float          ram_samples[120];/* rolling RSS samples in MB */
+    int            ram_head;        /* next write index */
+    int            ram_count;       /* samples filled so far */
+    guint          ram_timer;       /* g_timeout id */
+    /* graph colors — loaded from [ram_graph] in config */
+    double         ram_col_line[3]; /* main line RGB */
+    double         ram_col_glow[3]; /* glow RGB */
+    double         ram_col_grid[3]; /* grid RGB */
+    double         ram_col_text[3]; /* label RGB */
 
     /* layout — saved/restored */
     GtkWidget     *paned;           /* main h-paned for tree position */
@@ -323,6 +342,9 @@ static void on_tree_toggle(GtkMenuItem *item, AppState *app);
 static void app_apply_font_size(AppState *app);
 static void hl_load_config(AppState *app);
 static void hl_apply(AppState *app, GtkTextBuffer *buf);
+static void tab_mark_visible_dirty(EditorTab *tab);
+static gboolean hl_deferred_cb(EditorTab *tab);
+static void parse_hex_color(const char *hex, double out[3], const double def[3]);
 static void on_tts_stop(GtkMenuItem *item, AppState *app);
 static void update_cursor_label(AppState *app);
 
@@ -451,11 +473,68 @@ static void tab_mark_clean(EditorTab *tab) {
     tab->is_dirty = FALSE;
 }
 
-/* ── debounced highlight callback ───────────────────────────────────────── */
+/* ── dirty-line helpers ─────────────────────────────────────────────────── */
+
+/* Mark a single line dirty for incremental rehighlight */
+static void tab_mark_line_dirty(EditorTab *tab, gint line) {
+    if (!tab->app->hl_enabled) return;
+    /* insert sorted, skip duplicates */
+    GArray *a = tab->dirty_lines;
+    for (guint i = 0; i < a->len; i++) {
+        gint v = g_array_index(a, gint, i);
+        if (v == line) return;
+        if (v > line) { g_array_insert_val(a, i, line); return; }
+    }
+    g_array_append_val(a, line);
+}
+
+/* Mark the entire visible region dirty (used after scroll or load) */
+static void tab_mark_visible_dirty(EditorTab *tab) {
+    if (!tab->app->hl_enabled || !tab->text_view) return;
+    GdkRectangle vis;
+    gtk_text_view_get_visible_rect(GTK_TEXT_VIEW(tab->text_view), &vis);
+    GtkTextIter s, e;
+    gtk_text_view_get_iter_at_location(GTK_TEXT_VIEW(tab->text_view), &s, vis.x, vis.y);
+    gtk_text_view_get_iter_at_location(GTK_TEXT_VIEW(tab->text_view), &e, vis.x, vis.y + vis.height);
+    gint sl = gtk_text_iter_get_line(&s);
+    gint el = gtk_text_iter_get_line(&e);
+    for (gint l = sl; l <= el; l++) tab_mark_line_dirty(tab, l);
+}
+
+/* ── insert/delete signal handlers to capture dirty lines ───────────────── */
+
+static void on_buf_insert(GtkTextBuffer *buf, GtkTextIter *pos,
+                          gchar *text, gint len, EditorTab *tab) {
+    gint line = gtk_text_iter_get_line(pos);
+    tab_mark_line_dirty(tab, line);
+    /* if inserting newlines, mark following lines dirty too */
+    if (len > 0 && memchr(text, '\n', len)) {
+        GtkTextIter end = *pos;
+        gtk_text_iter_forward_chars(&end, g_utf8_strlen(text, len));
+        gint end_line = gtk_text_iter_get_line(&end);
+        for (gint l = line + 1; l <= end_line; l++) tab_mark_line_dirty(tab, l);
+    }
+}
+
+static void on_buf_delete(GtkTextBuffer *buf, GtkTextIter *start,
+                          GtkTextIter *end, EditorTab *tab) {
+    gint sl = gtk_text_iter_get_line(start);
+    gint el = gtk_text_iter_get_line(end);
+    for (gint l = sl; l <= el; l++) tab_mark_line_dirty(tab, l);
+}
+
+/* ── incremental highlight: only process dirty lines ────────────────────── */
+
+static void hl_apply_lines(AppState *app, EditorTab *tab);
 
 static gboolean hl_deferred_cb(EditorTab *tab) {
     tab->hl_timer = 0;
-    hl_apply(tab->app, tab->text_buf);
+    if (tab->hl_full_pending) {
+        tab->hl_full_pending = FALSE;
+        hl_apply(tab->app, tab->text_buf);  /* full pass for load/etc */
+    } else {
+        hl_apply_lines(tab->app, tab);       /* incremental: dirty lines only */
+    }
     return G_SOURCE_REMOVE;
 }
 
@@ -475,21 +554,16 @@ static gboolean undo_deferred_cb(EditorTab *tab) {
 static void on_text_changed(GtkTextBuffer *buf, EditorTab *tab) {
     if (!tab->undo_inhibit) {
         tab->is_dirty = TRUE;
-
-        /* Undo snapshot: only schedule if none is pending. The timer fires
-         * 500 ms after the FIRST change in a burst — no cancel/reschedule
-         * overhead on every keypress. */
         if (!tab->undo_timer)
             tab->undo_timer = g_timeout_add(500, (GSourceFunc)undo_deferred_cb, tab);
     }
 
-    /* Highlight: schedule once per burst, fire 300 ms after the first change.
-     * No cancel/reschedule — the timer just coalesces the whole burst into
-     * one regex pass. Fast typing never re-arms it mid-burst. */
-    if (!tab->hl_timer)
-        tab->hl_timer = g_timeout_add(300, (GSourceFunc)hl_deferred_cb, tab);
+    /* dirty lines are marked by on_buf_insert/on_buf_delete before this fires;
+     * just schedule the deferred pass if not already pending. */
+    if (tab->app->hl_enabled && !tab->hl_timer)
+        tab->hl_timer = g_timeout_add(80, (GSourceFunc)hl_deferred_cb, tab);
 
-    /* Line numbers: only rebuild when line count changes — cheap O(1) check. */
+    /* Line numbers: only rebuild when line count changes. */
     int new_count = gtk_text_buffer_get_line_count(buf);
     if (new_count != tab->last_line_count) {
         tab->last_line_count = new_count;
@@ -542,7 +616,10 @@ static void tab_load_file(EditorTab *tab, const char *path) {
     tab->current_file = g_strdup(path);
     tab->is_dirty     = FALSE;
 
-    hl_apply(tab->app, tab->text_buf);
+    /* full highlight pass needed after load */
+    tab->hl_full_pending = TRUE;
+    if (tab->app->hl_enabled && !tab->hl_timer)
+        tab->hl_timer = g_timeout_add(80, (GSourceFunc)hl_deferred_cb, tab);
     tab_update_line_numbers(tab);
     tab_update_label(tab);
     app_log(tab->app, "▸ Loaded: %s", path);
@@ -607,9 +684,11 @@ static EditorTab *tab_new(AppState *app, const char *path) {
     tab->current_file = NULL;
     tab->undo_inhibit = FALSE;
     tab->is_dirty     = FALSE;
-    tab->hl_timer     = 0;
-    tab->undo_timer   = 0;
+    tab->hl_timer        = 0;
+    tab->undo_timer      = 0;
     tab->last_line_count = 0;
+    tab->dirty_lines     = g_array_new(FALSE, FALSE, sizeof(gint));
+    tab->hl_full_pending = FALSE;
     undo_stack_init(&tab->undo_stack);
     undo_stack_init(&tab->redo_stack);
 
@@ -649,6 +728,12 @@ static EditorTab *tab_new(AppState *app, const char *path) {
         GTK_SCROLLED_WINDOW(tab->scroll));
     g_signal_connect(vadj, "value-changed",
         G_CALLBACK(on_line_scroll_sync), tab);
+
+    /* dirty-line tracking — must connect before "changed" so line info is valid */
+    g_signal_connect(tab->text_buf, "insert-text",
+        G_CALLBACK(on_buf_insert), tab);
+    g_signal_connect(tab->text_buf, "delete-range",
+        G_CALLBACK(on_buf_delete), tab);
 
     /* text changed */
     g_signal_connect(tab->text_buf, "changed",
@@ -738,6 +823,7 @@ static void on_tab_close_clicked(GtkButton *btn, GtkWidget *page) {
         undo_stack_free(&tab->undo_stack);
         undo_stack_free(&tab->redo_stack);
         g_free(tab->current_file);
+        if (tab->dirty_lines) g_array_free(tab->dirty_lines, TRUE);
         g_free(tab);
     }
 }
@@ -1051,6 +1137,21 @@ static gboolean on_key_press(GtkWidget *w, GdkEventKey *ev, AppState *app) {
     /* Ctrl+S — save */
     if (ctrl && ev->keyval == GDK_KEY_s) {
         on_save(NULL, app); return TRUE;
+    }
+    /* Ctrl+A — select all */
+    if (ctrl && ev->keyval == GDK_KEY_a) {
+        GtkTextIter s, e;
+        gtk_text_buffer_get_bounds(buf, &s, &e);
+        gtk_text_buffer_select_range(buf, &s, &e);
+        return TRUE;
+    }
+    /* Ctrl+W — close current tab */
+    if (ctrl && ev->keyval == GDK_KEY_w) {
+        GtkWidget *page = gtk_notebook_get_nth_page(
+            GTK_NOTEBOOK(app->notebook),
+            gtk_notebook_get_current_page(GTK_NOTEBOOK(app->notebook)));
+        if (page) on_tab_close_clicked(NULL, page);
+        return TRUE;
     }
     /* Ctrl+Z — undo */
     if (ctrl && ev->keyval == GDK_KEY_z) {
@@ -1522,6 +1623,7 @@ static void hl_apply_regex(GtkTextBuffer *buf, GRegex *re,
 
 static void hl_apply(AppState *app, GtkTextBuffer *buf) {
     if (!app->hl_tag_comment) return;  /* not loaded yet */
+    if (!app->hl_enabled) return;      /* highlighting toggled off */
 
     /* ── Only highlight the visible region + a small margin.
      *    Scanning the whole buffer is O(n) in doc size; the visible
@@ -1659,6 +1761,111 @@ static void hl_apply(AppState *app, GtkTextBuffer *buf) {
 
     g_free(text);
 }
+
+/* ── hl_apply_lines: incremental — only rehighlight dirty lines ─────────── */
+
+static void hl_apply_line(AppState *app, EditorTab *tab, gint line) {
+    GtkTextBuffer *buf = tab->text_buf;
+    gint total = gtk_text_buffer_get_line_count(buf);
+    if (line >= total) return;
+
+    GtkTextIter s, e;
+    gtk_text_buffer_get_iter_at_line(buf, &s, line);
+    e = s;
+    if (!gtk_text_iter_ends_line(&e))
+        gtk_text_iter_forward_to_line_end(&e);
+
+    /* clear all tags on this line */
+    for (int i = 0; i < app->hl_group_count; i++)
+        if (app->hl_kw_tags[i])
+            gtk_text_buffer_remove_tag(buf, app->hl_kw_tags[i], &s, &e);
+    if (app->hl_tag_lime)    gtk_text_buffer_remove_tag(buf, app->hl_tag_lime,    &s, &e);
+    if (app->hl_tag_coral)   gtk_text_buffer_remove_tag(buf, app->hl_tag_coral,   &s, &e);
+    if (app->hl_tag_comment) gtk_text_buffer_remove_tag(buf, app->hl_tag_comment, &s, &e);
+    if (app->hl_tag_dot_l)   gtk_text_buffer_remove_tag(buf, app->hl_tag_dot_l,   &s, &e);
+    if (app->hl_tag_dot_r)   gtk_text_buffer_remove_tag(buf, app->hl_tag_dot_r,   &s, &e);
+    if (app->hl_tag_steel)   gtk_text_buffer_remove_tag(buf, app->hl_tag_steel,   &s, &e);
+
+    gint base_offset = gtk_text_iter_get_offset(&s);
+    char *text = gtk_text_buffer_get_text(buf, &s, &e, FALSE);
+    if (!text || !text[0]) { g_free(text); return; }
+
+    /* strings */
+    {
+        static GRegex *re_str = NULL;
+        if (!re_str) re_str = g_regex_new("(['\"])((?:\\\\.|[^\\\\'\"\\n])*)\\1",
+                                          G_REGEX_OPTIMIZE, 0, NULL);
+        hl_apply_regex(buf, re_str, app->hl_tag_coral, text, 2, base_offset);
+    }
+    /* keyword groups */
+    for (int i = 0; i < app->hl_group_count; i++)
+        hl_apply_regex(buf, app->hl_kw_regex[i], app->hl_kw_tags[i], text, 1, base_offset);
+    /* = operator */
+    {
+        static GRegex *re_eq = NULL;
+        if (!re_eq) re_eq = g_regex_new("(?<![=!<>])=(?!=)", G_REGEX_OPTIMIZE, 0, NULL);
+        hl_apply_regex(buf, re_eq, app->hl_tag_steel, text, 0, base_offset);
+    }
+    /* @staticmethod */
+    {
+        static GRegex *re_sm = NULL;
+        if (!re_sm) re_sm = g_regex_new("@staticmethod(?!\\w)", G_REGEX_OPTIMIZE, 0, NULL);
+        hl_apply_regex(buf, re_sm, app->hl_tag_steel, text, 0, base_offset);
+    }
+    /* class name */
+    {
+        static GRegex *re_cls = NULL;
+        if (!re_cls) re_cls = g_regex_new("(?<!\\w)class\\s+(\\w+)", G_REGEX_OPTIMIZE, 0, NULL);
+        hl_apply_regex(buf, re_cls, app->hl_tag_lime, text, 1, base_offset);
+    }
+    /* dot notation */
+    {
+        static GRegex *re_dot = NULL;
+        if (!re_dot) re_dot = g_regex_new("\\b(\\w+)\\.(\\w+)\\b", G_REGEX_OPTIMIZE, 0, NULL);
+        GMatchInfo *mi = NULL;
+        g_regex_match(re_dot, text, 0, &mi);
+        while (g_match_info_matches(mi)) {
+            gint ls, le, rs, re2;
+            g_match_info_fetch_pos(mi, 1, &ls, &le);
+            g_match_info_fetch_pos(mi, 2, &rs, &re2);
+            if (ls >= 0 && le > ls) {
+                GtkTextIter a, b;
+                glong cl = base_offset + g_utf8_pointer_to_offset(text, text + ls);
+                glong cr = base_offset + g_utf8_pointer_to_offset(text, text + le);
+                gtk_text_buffer_get_iter_at_offset(buf, &a, (gint)cl);
+                gtk_text_buffer_get_iter_at_offset(buf, &b, (gint)cr);
+                gtk_text_buffer_apply_tag(buf, app->hl_tag_dot_l, &a, &b);
+            }
+            if (rs >= 0 && re2 > rs) {
+                GtkTextIter a, b;
+                glong cl = base_offset + g_utf8_pointer_to_offset(text, text + rs);
+                glong cr = base_offset + g_utf8_pointer_to_offset(text, text + re2);
+                gtk_text_buffer_get_iter_at_offset(buf, &a, (gint)cl);
+                gtk_text_buffer_get_iter_at_offset(buf, &b, (gint)cr);
+                gtk_text_buffer_apply_tag(buf, app->hl_tag_dot_r, &a, &b);
+            }
+            g_match_info_next(mi, NULL);
+        }
+        g_match_info_free(mi);
+    }
+    /* comments — highest priority, painted last */
+    {
+        static GRegex *re_cmt = NULL;
+        if (!re_cmt) re_cmt = g_regex_new("(#[^\n]*|//[^\n]*)", G_REGEX_OPTIMIZE, 0, NULL);
+        hl_apply_regex(buf, re_cmt, app->hl_tag_comment, text, 0, base_offset);
+    }
+
+    g_free(text);
+}
+
+static void hl_apply_lines(AppState *app, EditorTab *tab) {
+    if (!app->hl_enabled || !tab->dirty_lines) return;
+    GArray *a = tab->dirty_lines;
+    for (guint i = 0; i < a->len; i++)
+        hl_apply_line(app, tab, g_array_index(a, gint, i));
+    g_array_set_size(a, 0);  /* clear dirty list */
+}
+
 /* ── destroy ────────────────────────────────────────────────────────────── */
 
 
@@ -1949,6 +2156,21 @@ static void app_load_config(AppState *app) {
     app->_cfg_active_tab = (!err && active >= 0) ? active : 0;
     g_clear_error(&err);
 
+    /* ── [ram_graph] ── */
+    static const double DEF_LINE[3] = { 0.910, 0.627, 0.125 }; /* amber */
+    static const double DEF_GLOW[3] = { 0.910, 0.627, 0.125 }; /* amber */
+    static const double DEF_GRID[3] = { 0.000, 0.600, 0.300 }; /* green */
+    static const double DEF_TEXT[3] = { 0.000, 1.000, 0.600 }; /* bright green */
+    char *rc_line = g_key_file_get_string(kf, "ram_graph", "color_line", NULL);
+    char *rc_glow = g_key_file_get_string(kf, "ram_graph", "color_glow", NULL);
+    char *rc_grid = g_key_file_get_string(kf, "ram_graph", "color_grid", NULL);
+    char *rc_text = g_key_file_get_string(kf, "ram_graph", "color_text", NULL);
+    parse_hex_color(rc_line, app->ram_col_line, DEF_LINE);
+    parse_hex_color(rc_glow, app->ram_col_glow, DEF_GLOW);
+    parse_hex_color(rc_grid, app->ram_col_grid, DEF_GRID);
+    parse_hex_color(rc_text, app->ram_col_text, DEF_TEXT);
+    g_free(rc_line); g_free(rc_glow); g_free(rc_grid); g_free(rc_text);
+
     g_key_file_free(kf);
 }
 
@@ -2008,6 +2230,31 @@ static void app_save_session(AppState *app) {
 
     gint active_idx = gtk_notebook_get_current_page(GTK_NOTEBOOK(app->notebook));
     g_key_file_set_integer(kf, "session", "active_tab", active_idx);
+
+    /* ── [ram_graph] — write if keys missing so first-run gets the section ── */
+    {
+        char hex[8];
+        if (!g_key_file_has_key(kf, "ram_graph", "color_line", NULL)) {
+            g_snprintf(hex, sizeof(hex), "#%02X%02X%02X",
+                (int)(app->ram_col_line[0]*255), (int)(app->ram_col_line[1]*255), (int)(app->ram_col_line[2]*255));
+            g_key_file_set_string(kf, "ram_graph", "color_line", hex);
+        }
+        if (!g_key_file_has_key(kf, "ram_graph", "color_glow", NULL)) {
+            g_snprintf(hex, sizeof(hex), "#%02X%02X%02X",
+                (int)(app->ram_col_glow[0]*255), (int)(app->ram_col_glow[1]*255), (int)(app->ram_col_glow[2]*255));
+            g_key_file_set_string(kf, "ram_graph", "color_glow", hex);
+        }
+        if (!g_key_file_has_key(kf, "ram_graph", "color_grid", NULL)) {
+            g_snprintf(hex, sizeof(hex), "#%02X%02X%02X",
+                (int)(app->ram_col_grid[0]*255), (int)(app->ram_col_grid[1]*255), (int)(app->ram_col_grid[2]*255));
+            g_key_file_set_string(kf, "ram_graph", "color_grid", hex);
+        }
+        if (!g_key_file_has_key(kf, "ram_graph", "color_text", NULL)) {
+            g_snprintf(hex, sizeof(hex), "#%02X%02X%02X",
+                (int)(app->ram_col_text[0]*255), (int)(app->ram_col_text[1]*255), (int)(app->ram_col_text[2]*255));
+            g_key_file_set_string(kf, "ram_graph", "color_text", hex);
+        }
+    }
 
     /* write back */
     gsize  len  = 0;
@@ -2153,7 +2400,7 @@ static void tree_populate(AppState *app, const char *folder) {
     char *safe_root_name = g_filename_to_utf8(root_name, -1, NULL, NULL, NULL);
     if (!safe_root_name) safe_root_name = g_strdup(root_name);
 
-    char *root_label = g_strdup_printf("📁 %s", safe_root_name);
+    char *root_label = g_strdup_printf("◎ %s", safe_root_name);
 
     GtkTreeIter root;
     gtk_tree_store_append(app->tree_store, &root, NULL);
@@ -2233,6 +2480,168 @@ static gboolean on_window_configure(GtkWidget *w, GdkEventConfigure *ev,
     app->last_win_w = ev->width;
     app->last_win_h = ev->height;
     return FALSE;  /* propagate */
+}
+
+
+
+
+
+/* ── hex color parser ───────────────────────────────────────────────────── */
+
+static void parse_hex_color(const char *hex, double out[3], const double def[3]) {
+    if (!hex || hex[0] != '#' || strlen(hex) < 7) {
+        out[0] = def[0]; out[1] = def[1]; out[2] = def[2]; return;
+    }
+    unsigned int r, g, b;
+    if (sscanf(hex + 1, "%02x%02x%02x", &r, &g, &b) == 3) {
+        out[0] = r / 255.0; out[1] = g / 255.0; out[2] = b / 255.0;
+    } else {
+        out[0] = def[0]; out[1] = def[1]; out[2] = def[2];
+    }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * FEATURE: RAM usage graph  (scrolling Cairo line, amber/green)
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+#define RAM_SAMPLES 120
+
+static float ram_read_mb(void) {
+    FILE *f = fopen("/proc/self/status", "r");
+    if (!f) return 0.f;
+    char line[128];
+    float kb = 0.f;
+    while (fgets(line, sizeof(line), f)) {
+        if (strncmp(line, "VmRSS:", 6) == 0) {
+            sscanf(line + 6, "%f", &kb);
+            break;
+        }
+    }
+    fclose(f);
+    return kb / 1024.f;
+}
+
+static gboolean on_ram_tick(AppState *app) {
+    float mb = ram_read_mb();
+    app->ram_samples[app->ram_head] = mb;
+    app->ram_head = (app->ram_head + 1) % RAM_SAMPLES;
+    if (app->ram_count < RAM_SAMPLES) app->ram_count++;
+    gtk_widget_queue_draw(app->ram_graph);
+    return G_SOURCE_CONTINUE;
+}
+
+static gboolean on_ram_draw(GtkWidget *widget, cairo_t *cr, AppState *app) {
+    int w = gtk_widget_get_allocated_width(widget);
+    int h = gtk_widget_get_allocated_height(widget);
+
+    /* background */
+    cairo_set_source_rgb(cr, 0.012, 0.012, 0.02);
+    cairo_paint(cr);
+
+    int n = app->ram_count;
+    if (n < 2) return FALSE;
+
+    /* find min/max for scaling */
+    float mn = 1e9f, mx = 0.f;
+    for (int i = 0; i < n; i++) {
+        int idx = (app->ram_head - n + i + RAM_SAMPLES) % RAM_SAMPLES;
+        float v = app->ram_samples[idx];
+        if (v < mn) mn = v;
+        if (v > mx) mx = v;
+    }
+    float range = mx - mn;
+    if (range < 1.f) range = 1.f;  /* avoid flat-line divide */
+
+    /* grid lines */
+    cairo_set_line_width(cr, 0.5);
+    cairo_set_source_rgba(cr, app->ram_col_grid[0], app->ram_col_grid[1], app->ram_col_grid[2], 0.18);
+    for (int g = 1; g < 4; g++) {
+        double gy = h - (h * g / 4.0);
+        cairo_move_to(cr, 0, gy);
+        cairo_line_to(cr, w, gy);
+        cairo_stroke(cr);
+    }
+
+    /* glow pass — wider, low alpha */
+    cairo_set_line_width(cr, 3.0);
+    cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
+    cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+    cairo_set_source_rgba(cr, app->ram_col_glow[0], app->ram_col_glow[1], app->ram_col_glow[2], 0.25);
+    for (int i = 0; i < n; i++) {
+        int idx = (app->ram_head - n + i + RAM_SAMPLES) % RAM_SAMPLES;
+        float v = app->ram_samples[idx];
+        double x = (double)i / (n - 1) * w;
+        double y = h - ((v - mn) / range) * (h - 4) - 2;
+        if (i == 0) cairo_move_to(cr, x, y);
+        else        cairo_line_to(cr, x, y);
+    }
+    cairo_stroke(cr);
+
+    /* main line */
+    cairo_set_line_width(cr, 1.5);
+    cairo_set_source_rgb(cr, app->ram_col_line[0], app->ram_col_line[1], app->ram_col_line[2]);
+    for (int i = 0; i < n; i++) {
+        int idx = (app->ram_head - n + i + RAM_SAMPLES) % RAM_SAMPLES;
+        float v = app->ram_samples[idx];
+        double x = (double)i / (n - 1) * w;
+        double y = h - ((v - mn) / range) * (h - 4) - 2;
+        if (i == 0) cairo_move_to(cr, x, y);
+        else        cairo_line_to(cr, x, y);
+    }
+    cairo_stroke(cr);
+
+    /* current value label */
+    float cur = app->ram_samples[(app->ram_head - 1 + RAM_SAMPLES) % RAM_SAMPLES];
+    char lbl[32];
+    g_snprintf(lbl, sizeof(lbl), "%.1f MB", cur);
+    cairo_set_source_rgb(cr, app->ram_col_text[0], app->ram_col_text[1], app->ram_col_text[2]);
+    cairo_select_font_face(cr, "monospace",
+        CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
+    cairo_set_font_size(cr, 9.0);
+    cairo_move_to(cr, 4, h - 4);
+    cairo_show_text(cr, lbl);
+
+    return FALSE;
+}
+
+/* ── highlight toggle ───────────────────────────────────────────────────── */
+
+static void on_hl_toggle(GtkButton *btn, AppState *app) {
+    app->hl_enabled = !app->hl_enabled;
+    gtk_button_set_label(btn, app->hl_enabled ? "HL ON" : "HL OFF");
+
+    if (app->hl_enabled) {
+        /* mark visible region of each tab dirty and kick the timer */
+        int n = gtk_notebook_get_n_pages(GTK_NOTEBOOK(app->notebook));
+        for (int i = 0; i < n; i++) {
+            GtkWidget *pg = gtk_notebook_get_nth_page(GTK_NOTEBOOK(app->notebook), i);
+            EditorTab *t  = g_object_get_data(G_OBJECT(pg), "editor-tab");
+            if (!t) continue;
+            tab_mark_visible_dirty(t);
+            if (!t->hl_timer)
+                t->hl_timer = g_timeout_add(80, (GSourceFunc)hl_deferred_cb, t);
+        }
+    } else {
+        /* strip all highlight tags from all open tabs */
+        int n = gtk_notebook_get_n_pages(GTK_NOTEBOOK(app->notebook));
+        for (int i = 0; i < n; i++) {
+            GtkWidget  *pg  = gtk_notebook_get_nth_page(GTK_NOTEBOOK(app->notebook), i);
+            EditorTab  *t   = g_object_get_data(G_OBJECT(pg), "editor-tab");
+            if (!t) continue;
+            GtkTextIter s, e;
+            gtk_text_buffer_get_bounds(t->text_buf, &s, &e);
+            for (int j = 0; j < app->hl_group_count; j++)
+                if (app->hl_kw_tags[j])
+                    gtk_text_buffer_remove_tag(t->text_buf, app->hl_kw_tags[j], &s, &e);
+            if (app->hl_tag_lime)    gtk_text_buffer_remove_tag(t->text_buf, app->hl_tag_lime,    &s, &e);
+            if (app->hl_tag_coral)   gtk_text_buffer_remove_tag(t->text_buf, app->hl_tag_coral,   &s, &e);
+            if (app->hl_tag_comment) gtk_text_buffer_remove_tag(t->text_buf, app->hl_tag_comment, &s, &e);
+            if (app->hl_tag_dot_l)   gtk_text_buffer_remove_tag(t->text_buf, app->hl_tag_dot_l,   &s, &e);
+            if (app->hl_tag_dot_r)   gtk_text_buffer_remove_tag(t->text_buf, app->hl_tag_dot_r,   &s, &e);
+            if (app->hl_tag_steel)   gtk_text_buffer_remove_tag(t->text_buf, app->hl_tag_steel,   &s, &e);
+        }
+    }
+    app_log(app, "▸ Highlighting %s.", app->hl_enabled ? "on" : "off");
 }
 
 static void build_ui(AppState *app) {
@@ -2349,6 +2758,12 @@ static void build_ui(AppState *app) {
         gtk_box_pack_start(GTK_BOX(tts_bar), b, FALSE, FALSE, 0);
     }
 
+    /* ── highlight toggle button ── */
+    app->hl_btn = gtk_button_new_with_label("HL OFF");
+    gtk_style_context_add_class(gtk_widget_get_style_context(app->hl_btn), "btn-menu");
+    g_signal_connect(app->hl_btn, "clicked", G_CALLBACK(on_hl_toggle), app);
+    gtk_box_pack_start(GTK_BOX(tts_bar), app->hl_btn, FALSE, FALSE, 0);
+
     /* cursor pos label on right of tts bar */
     app->cursor_label = gtk_label_new("Ln 1  Col 1");
     gtk_style_context_add_class(gtk_widget_get_style_context(app->cursor_label), "section-label");
@@ -2436,18 +2851,39 @@ static void build_ui(AppState *app) {
     gtk_container_add(GTK_CONTAINER(log_scroll), app->log_view);
     gtk_box_pack_start(GTK_BOX(outer), log_scroll, FALSE, FALSE, 0);
 
-    /* ── status bar ───────────────────────────────────────────────── */
+    /* ── status bar + RAM graph ───────────────────────────────────── */
+    GtkWidget *bottom_bar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+    gtk_box_pack_start(GTK_BOX(outer), bottom_bar, FALSE, FALSE, 0);
+
     char *notes_dir = get_notes_dir();
     char *status_text = g_strdup_printf("dir: %s", notes_dir);
     app->status_label = gtk_label_new(status_text);
     gtk_style_context_add_class(
         gtk_widget_get_style_context(app->status_label), "status-bar");
     gtk_widget_set_halign(app->status_label, GTK_ALIGN_START);
-    gtk_box_pack_start(GTK_BOX(outer), app->status_label, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(bottom_bar), app->status_label, TRUE, TRUE, 0);
     g_free(status_text);
     g_free(notes_dir);
 
+    /* RAM graph widget */
+    app->ram_graph = gtk_drawing_area_new();
+    gtk_widget_set_size_request(app->ram_graph, 160, 28);
+    g_signal_connect(app->ram_graph, "draw",
+        G_CALLBACK(on_ram_draw), app);
+    gtk_box_pack_end(GTK_BOX(bottom_bar), app->ram_graph, FALSE, FALSE, 4);
+
+    /* RAM label */
+    GtkWidget *ram_lbl = gtk_label_new("RAM:");
+    gtk_style_context_add_class(gtk_widget_get_style_context(ram_lbl), "status-bar");
+    gtk_box_pack_end(GTK_BOX(bottom_bar), ram_lbl, FALSE, FALSE, 0);
+
     gtk_widget_show_all(app->window);
+
+    /* kick off RAM sampling — first sample immediately, then every second */
+    app->ram_head  = 0;
+    app->ram_count = 0;
+    on_ram_tick(app);
+    app->ram_timer = g_timeout_add(1000, (GSourceFunc)on_ram_tick, app);
 
     /* load syntax highlighting config */
     hl_load_config(app);
@@ -2516,9 +2952,16 @@ int main(int argc, char **argv) {
     app->font_size     = DEFAULT_FONT_PX;
     app->tts_pid       = 0;
     app->tts_voice_joe = TRUE;
+    app->hl_enabled    = FALSE;
 
     app_load_config(app);
     build_ui(app);
+
+    /* ── open file(s) passed on the command line (e.g. from file manager) ── */
+    for (int i = 1; i < argc; i++) {
+        if (argv[i] && argv[i][0] != '-' && g_file_test(argv[i], G_FILE_TEST_EXISTS))
+            tab_new(app, argv[i]);
+    }
 
     gtk_main();
 

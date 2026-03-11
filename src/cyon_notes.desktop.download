@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=CYON Notes
+Comment=CYON Notes editor with TTS
+Exec=/usr/local/bin/cyon_notes %F
+Icon=accessories-text-editor
+Terminal=false
+Categories=TextEditor;Utility;
+MimeType=text/plain;text/x-csrc;text/x-chdr;text/markdown;text/x-log;text/x-python;text/x-shellscript;
+StartupNotify=false
