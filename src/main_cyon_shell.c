@@ -422,13 +422,7 @@ static void start_shell(void) {
     }
 }
 
-/* ── Shutdown ────────────────────────────────────────────────────────────── */
-static void stop_all(GtkWidget *b, gpointer d) {
-    ui_log("!!! EMERGENCY SHUTDOWN INITIATED !!!");
-    if (shell_pid > 0) { kill(shell_pid, SIGTERM); shell_pid = 0; }
-}
-
-static void shutdown_all(void) {
+/* ── Shutdown ────────────────────────────────────────────────────────────── */static void shutdown_all(void) {
     if (shell_pid  > 0) { kill(shell_pid,  SIGTERM); shell_pid  = 0; }
     gtk_main_quit();
 }
@@ -592,10 +586,6 @@ int main(int argc, char *argv[]) {
     GtkWidget *title = gtk_label_new("▸ CYON CONTROL PANEL");
     gtk_style_context_add_class(gtk_widget_get_style_context(title), "title-label");
     gtk_box_pack_start(GTK_BOX(outer), title, FALSE, FALSE, 0);
-
-    /* ── Stop All ─────────────────────────────────────────────────────── */
-    GtkWidget *stop_all_btn = make_button("■ SHUTDOWN ALL", "btn-stop", G_CALLBACK(stop_all));
-    gtk_box_pack_start(GTK_BOX(outer), stop_all_btn, FALSE, FALSE, 5);
 
     /* ── Marquee strip ───────────────────────────────────────────────── */
     GtkWidget *msep = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
