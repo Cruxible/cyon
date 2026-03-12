@@ -180,7 +180,7 @@ notebook > header > tabs > tab {
     color: #336655;
     font-family: monospace;
     font-size: 11px;
-    padding: 4px 8px;
+    padding: 4px 12px;
     border: 1px solid #1a2a20;
     border-bottom: none;
     margin-right: 2px;
@@ -687,32 +687,28 @@ class PyraNotesWindow(Gtk.Window):
         self.log_view.set_cursor_visible(False)
         self.log_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
         self.log_buf = self.log_view.get_buffer()
+        self._log_tag_amber = self.log_buf.create_tag("amber", foreground="#E8A020")
         log_scroll.add(self.log_view)
         outer.pack_start(log_scroll, False, False, 0)
 
         # ── Status bar ───────────────────────────────────────────────────
+        bottom_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        self._ram_area = Gtk.DrawingArea()
+        self._ram_area.set_size_request(180, 28)
+        self._ram_area.connect("draw", self._on_ram_draw)
+        bottom_bar.pack_start(self._ram_area, False, False, 0)
         self.status = Gtk.Label(label=f"dir: {NOTES_DIR}")
         self.status.get_style_context().add_class("status-bar")
         self.status.set_halign(Gtk.Align.START)
-        outer.pack_start(self.status, False, False, 0)
+        bottom_bar.pack_start(self.status, True, True, 4)
+        outer.pack_start(bottom_bar, False, False, 0)
 
+        self._ram_samples = []
+        self._ram_timer   = None
         self.connect("destroy", self._on_destroy)
         self.show_all()
-
-        self.log(f"▸ Ready. Notes dir: {NOTES_DIR}")
-
-        # ── restore last opened file ──────────────────────────────────────
-        last = self._cfg.get("ui", "last_file", fallback=None)
-        if last and os.path.isfile(last):
-            try:
-                tab = self._tab()
-                tab.load_file(last)
-                self.filename_entry.set_text(tab.display_name)
-                self._update_tab_label(self._notebook.get_current_page(), tab)
-                self.log(f"▸ Restored: {last}")
-                GLib.idle_add(tab.text_view.grab_focus)
-            except Exception as e:
-                self.log(f"▸ Could not restore last file: {e}")
+        self._ram_timer = GLib.timeout_add_seconds(1, self._ram_tick)
+        GLib.idle_add(self._boot_sequence)
 
     # ── tab management ───────────────────────────────────────────────────
 
@@ -1072,14 +1068,178 @@ class PyraNotesWindow(Gtk.Window):
         """Append a line to the log terminal and also update the status bar."""
         end = self.log_buf.get_end_iter()
         self.log_buf.insert(end, msg + "\n")
-        self.log_view.scroll_to_iter(self.log_buf.get_end_iter(), 0, False, 0, 0)
+        self._log_scroll()
         self.status.set_text(msg)
+
+    def _log_scroll(self):
+        mark = self.log_buf.get_mark("log-end")
+        if not mark:
+            mark = self.log_buf.create_mark("log-end",
+                                            self.log_buf.get_end_iter(), False)
+        else:
+            self.log_buf.move_mark(mark, self.log_buf.get_end_iter())
+        GLib.idle_add(self._log_scroll_now, mark)
+
+    def _log_scroll_now(self, mark):
+        self.log_view.scroll_to_mark(mark, 0.0, True, 0.0, 1.0)
+        return False
+
+    def _log_amber(self, msg):
+        start_offset = self.log_buf.get_char_count()
+        end = self.log_buf.get_end_iter()
+        self.log_buf.insert(end, msg + "\n")
+        start_it = self.log_buf.get_iter_at_offset(start_offset)
+        end_it   = self.log_buf.get_end_iter()
+        self.log_buf.apply_tag(self._log_tag_amber, start_it, end_it)
+        self._log_scroll()
+        self.status.set_text(msg)
+
+    # ── RAM graph ─────────────────────────────────────────────────────────
+
+    def _ram_tick(self):
+        mb = 0.0
+        try:
+            with open("/proc/self/status") as f:
+                for line in f:
+                    if line.startswith("VmRSS:"):
+                        mb = float(line.split()[1]) / 1024.0
+                        break
+        except OSError:
+            pass
+        self._ram_samples.append(mb)
+        if len(self._ram_samples) > 120:
+            self._ram_samples.pop(0)
+        self._ram_area.queue_draw()
+        return True
+
+    def _on_ram_draw(self, widget, cr):
+        import cairo
+        w = widget.get_allocated_width()
+        h = widget.get_allocated_height()
+        cr.set_source_rgb(0.012, 0.012, 0.02)
+        cr.paint()
+        n = len(self._ram_samples)
+        if n < 2:
+            return False
+        mn = min(self._ram_samples)
+        mx = max(self._ram_samples)
+        rng = max(mx - mn, 1.0)
+        def yx(i):
+            v = self._ram_samples[i]
+            x = i / (n - 1) * w
+            y = h - ((v - mn) / rng) * (h - 4) - 2
+            return x, y
+        # grid
+        cr.set_line_width(0.5)
+        cr.set_source_rgba(0.0, 0.6, 0.2, 0.18)
+        for g in range(1, 4):
+            gy = h - (h * g / 4.0)
+            cr.move_to(0, gy); cr.line_to(w, gy); cr.stroke()
+        # glow
+        cr.set_line_width(3.0)
+        cr.set_line_join(cairo.LINE_JOIN_ROUND)
+        cr.set_line_cap(cairo.LINE_CAP_ROUND)
+        cr.set_source_rgba(0.91, 0.63, 0.125, 0.25)
+        for i in range(n):
+            x, y = yx(i)
+            cr.move_to(x, y) if i == 0 else cr.line_to(x, y)
+        cr.stroke()
+        # main line
+        cr.set_line_width(1.5)
+        cr.set_source_rgb(0.91, 0.63, 0.125)
+        for i in range(n):
+            x, y = yx(i)
+            cr.move_to(x, y) if i == 0 else cr.line_to(x, y)
+        cr.stroke()
+        # label
+        cr.set_source_rgb(0.0, 1.0, 0.4)
+        cr.select_font_face("monospace", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_NORMAL)
+        cr.set_font_size(9.0)
+        cr.move_to(4, h - 4)
+        cr.show_text(f"{self._ram_samples[-1]:.1f} MB")
+        return False
+
+    # ── boot sequence ─────────────────────────────────────────────────────
+
+    _BOOT_QUOTES = [
+        "▸ no bugs found. (we stopped looking.)",
+        "▸ piper is ready. whether you are is your problem.",
+        "▸ still compiling. always compiling. somewhere.",
+        "▸ GTK3: because GTK4 is someone else's problem.",
+        "▸ syntax highlighting is always on. unlike some editors.",
+        "▸ this editor replaced Sublime. Sublime doesn't know yet.",
+        "▸ 5 years in the making. 0 regrets. maybe 1.",
+        "▸ warning: may cause productivity.",
+        "▸ pyra_notes.conf: edit it. you'll know what to do.",
+        "▸ undo stack: 300 deep. if you need more, call someone.",
+        "▸ TTS voices: joe (male) lessac (female) you (optional).",
+        "▸ welcome back. the code missed you. probably.",
+        "▸ pyra is underneath. do not go there unless you must.",
+        "▸ ctrl+z is in there. you're welcome. use it wisely.",
+        "▸ linux only. other OSes: not our problem.",
+        "▸ file saved. probably. hit Ctrl+S anyway.",
+        "▸ cyon: built from scratch. held together by stubbornness.",
+        "▸ the venv is fine. do not look at the venv.",
+        "▸ python3-gi must be apt. pip tried. we don't talk about it.",
+        "▸ ctrl+/ to comment. ctrl+d to duplicate. you're welcome.",
+    ]
+
+    _BOOT_STEPS = [
+        ("initializing pyra_notes",         2),
+        ("loading config",                  3),
+        ("warming up GTK",                  4),
+        ("checking for bugs",               5),
+        ("none found (we stopped looking)", 6),
+        ("mounting file tree",              7),
+        ("arming syntax engine",            8),
+        ("restoring session",               9),
+        ("bribing the log terminal",        10),
+    ]
+
+    @staticmethod
+    def _make_bar(fill, total=10):
+        return "[" + "█" * fill + "░" * (total - fill) + "]"
+
+    def _boot_sequence(self):
+        self.log("▸ PYRA NOTES // booting...")
+        self.log(" ")
+        self._boot_step(0)
+        return False
+
+    def _boot_step(self, step):
+        if step < len(self._BOOT_STEPS):
+            label, fill = self._BOOT_STEPS[step]
+            self.log(f"  {self._make_bar(fill)}  {label}")
+            GLib.timeout_add(120, self._boot_step, step + 1)
+        else:
+            self.log(f"  {self._make_bar(10)}  done.")
+            self.log(" ")
+            import random
+            self._log_amber(random.choice(self._BOOT_QUOTES))
+            self.log(" ")
+            self.log("▸ Ready.")
+            self.log(" ")
+            last = self._cfg.get("ui", "last_file", fallback=None)
+            if last and os.path.isfile(last):
+                try:
+                    tab = self._tab()
+                    tab.load_file(last)
+                    self.filename_entry.set_text(tab.display_name)
+                    self._update_tab_label(self._notebook.get_current_page(), tab)
+                    self.log(f"▸ Restored: {last}")
+                    GLib.idle_add(tab.text_view.grab_focus)
+                except Exception as e:
+                    self.log(f"▸ Could not restore last file: {e}")
+        return False
 
     # ── destroy — persist session state ──────────────────────────────────
 
     def _on_destroy(self, _win):
         if self._tree_monitor:
             self._tree_monitor.cancel()
+        if self._ram_timer:
+            GLib.source_remove(self._ram_timer)
+            self._ram_timer = None
         # Re-read the conf fresh so any manual edits the user made
         # (e.g. new highlight groups) are preserved — we only write ui keys on top.
         fresh = configparser.ConfigParser()
