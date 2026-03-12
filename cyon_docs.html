@@ -433,6 +433,7 @@ footer {
   <a href="#ollama-setup">Ollama + Llama 3</a>
   <a href="#modelfile">Modelfile</a>
   <a href="#running">Running</a>
+  <a href="#cyon-shell">Cyon Shell (no AI)</a>
 
   <span class="nav-section">REFERENCE</span>
   <a href="#programs-menu">Programs Menu</a>
@@ -482,6 +483,8 @@ footer {
 
 <span style="color:var(--text-dim)">All processes pipe stdout → GTK log view via reader threads</span>
 <span style="color:var(--text-dim)">Input field → shell_stdin (commands) + local_stdin (chat)</span>
+
+<span class="box">main_cyon_shell</span> <span class="arr">──spawns──▶</span> <span class="box cyan">/bin/bash</span>  <span style="color:var(--text-dim)">← no AI/bot — bash direct, commands in C</span>
 
 <span class="box">cyon_cli</span>  <span class="arr">──────────</span> <span style="color:var(--text-dim)">standalone CLI (launched in terminal)</span>
 <span class="box">watcher</span>   <span class="arr">──────────</span> <span style="color:var(--text-dim)">filesystem monitor (security)</span>
@@ -674,7 +677,10 @@ footer {
 <span class="g">gcc</span> <span class="am">-Iinclude -o bin/watcher cli/watcher.c</span>
 
 <span class="c"># Network scanner</span>
-<span class="g">gcc</span> <span class="am">-Iinclude cli/cyon_netscan.c -o bin/cyon_netscan</span></div>
+<span class="g">gcc</span> <span class="am">-Iinclude cli/cyon_netscan.c -o bin/cyon_netscan</span>
+
+<span class="c"># cyon_shell — no AI/bot variant</span>
+<span class="g">gcc</span> <span class="am">-Iinclude src/main_cyon_shell.c src/downloader.c -o bin/main_cyon_shell</span> `pkg-config --cflags --libs gtk+-3.0` <span class="am">-lpthread</span></div>
   </section>
 
   <!-- OLLAMA SETUP -->
@@ -748,6 +754,9 @@ You are running inside the Cyon desktop application on the user's machine.
     <div class="code-block"><button class="copy-btn" onclick="cp(this)">COPY</button><span class="c"># GTK desktop app (main window)</span>
 <span class="g">./bin/main_cyon</span>
 
+<span class="c"># GTK shell panel (no AI/bot version)</span>
+<span class="g">./bin/main_cyon_shell</span>
+
 <span class="c"># Or if bin/ is in PATH</span>
 <span class="g">main_cyon</span>
 
@@ -764,6 +773,26 @@ You are running inside the Cyon desktop application on the user's machine.
       <strong>// PATH SHORTCUT</strong>
       Run option 6 in <code>compile_cyon</code> to add <code>~/cyon/bin</code> and <code>~/cyon/pyra_tool</code> to your PATH in <code>~/.bashrc</code>. After that, just type <code>main_cyon</code> or <code>cyon_cli</code> from anywhere. like they were meant to.
     </div>
+  </section>
+
+  <!-- PROGRAMS MENU -->
+  <section id="cyon-shell">
+    <h2>main_cyon_shell — No AI / No Bot Variant</h2>
+    <p><code>main_cyon_shell</code> is a stripped-down version of the Cyon control panel for users who don't need or want the Ollama/Discord bot features. It keeps everything else — the GTK window, menus, marquee, log view, input field, and all Programs menu tools — but replaces the AI/bot layer with a direct <code>/bin/bash</code> pipe. No Python shell process. No venv required. Slash-commands are handled entirely in C.</p>
+
+    <div class="info">
+      <strong>// WHAT'S DIFFERENT FROM main_cyon</strong>
+      No Ollama server row. No Discord bot row. No LOCAL CYON row. No <code>cyon_shell.py</code>. Commands are processed natively in C and piped to <code>/bin/bash</code>. Everything else is identical.
+    </div>
+
+    <h3>Building</h3>
+    <div class="code-block"><button class="copy-btn" onclick="cp(this)">COPY</button><span class="c"># Via compile_cyon (recommended)</span>
+<span class="g">./compile_cyon</span>  <span class="c"># → option 11</span>
+
+<span class="c"># Or manually</span>
+<span class="g">gcc</span> <span class="am">-Iinclude src/main_cyon_shell.c src/downloader.c -o bin/main_cyon_shell</span> `pkg-config --cflags --libs gtk+-3.0` <span class="am">-lpthread</span></div>
+
+    <p>Option 11 compiles the binary and installs <code>cyon_shell.desktop</code> to <code>~/.local/share/applications/</code> under <strong>Accessories</strong>. Option 12 removes it. The full <code>uninstall_cyon</code> (option 10) removes it automatically too.</p>
   </section>
 
   <!-- PROGRAMS MENU -->
@@ -795,7 +824,7 @@ You are running inside the Cyon desktop application on the user's machine.
   <!-- CLI COMMANDS -->
   <section id="commands">
     <h2>CLI Commands (Input Field)</h2>
-    <p>These slash-commands are handled by <code>cyon_shell.py</code> and work from the GTK input field at the bottom of the window:</p>
+    <p>These slash-commands are handled natively in C and work from the GTK input field at the bottom of the window. In <code>main_cyon</code> they are processed by <code>cyon_shell.py</code>; in <code>main_cyon_shell</code> they are handled directly in C with no Python dependency:</p>
     <table>
       <tr><th>Command</th><th>What It Does</th></tr>
       <tr><td>/shutdown</td><td>Initiates full shutdown sequence</td></tr>
@@ -988,6 +1017,8 @@ You are running inside the Cyon desktop application on the user's machine.
       <tr><td>8</td><td>Remove Pyra PATH block from ~/.bashrc</td></tr>
       <tr><td>9</td><td>Uninstall Cyon (see below)</td></tr>
       <tr><td>10</td><td>Compile <code>cyon_notes</code> standalone notes editor — outputs to <code>bin/cyon_notes</code>, copies <code>cyon_notes.conf</code> alongside it</td></tr>
+      <tr><td>11</td><td>Compile <code>cyon_shell</code> — builds <code>main_cyon_shell</code> (no AI/bot, bash direct) and installs <code>cyon_shell.desktop</code> to Accessories</td></tr>
+      <tr><td>12</td><td>Remove <code>cyon_shell</code> — deletes <code>bin/main_cyon_shell</code> and <code>cyon_shell.desktop</code></td></tr>
       <tr><td>0</td><td>Exit (skill issue)</td></tr>
     </table>
   </section>
@@ -1002,6 +1033,8 @@ You are running inside the Cyon desktop application on the user's machine.
     <table>
       <tr><th>What</th><th>Path</th></tr>
       <tr><td>Desktop launcher</td><td>~/.local/share/applications/cyon.desktop</td></tr>
+      <tr><td>Notes desktop entry</td><td>~/.local/share/applications/cyon_notes.desktop</td></tr>
+      <tr><td>Shell panel desktop entry</td><td>~/.local/share/applications/cyon_shell.desktop (if installed)</td></tr>
       <tr><td>Python virtual env</td><td>~/pyra_env</td></tr>
       <tr><td>PATH entries</td><td>~/.bashrc (the Pyra PATH block)</td></tr>
       <tr><td>Cyon directory</td><td>~/cyon/ (entire source + binaries)</td></tr>

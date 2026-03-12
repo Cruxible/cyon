@@ -22,6 +22,7 @@ No cloud. No Electron. No regrets. (Maybe one.)
 - ✅ gtk_lib — GTK-based audio/video editing suite and media tools
 - ✅ Pyra Notes/TTS — combined GTK notes editor and Piper text-to-speech tool
 - ✅ Pyra Player — GTK media player (it plays things. that's the feature.)
+- ✅ main_cyon_shell — stripped-down control panel with no AI or bot dependencies; runs `/bin/bash` directly, all slash-commands handled natively in C
 
 ---
 
@@ -175,6 +176,8 @@ chmod +x compile_cyon
 | 8 | Remove Pyra PATH from ~/.bashrc |
 | 9 | Uninstall Cyon (see below — and think carefully) |
 | 10 | Compile cyon_notes standalone notes editor binary |
+| 11 | Compile cyon_shell — `main_cyon_shell` (no AI/bot, bash direct, Accessories menu) |
+| 12 | Remove cyon_shell — removes `bin/main_cyon_shell` and `cyon_shell.desktop` |
 | 0 | Exit (skill issue) |
 
 ### Manual Compilation
@@ -185,6 +188,9 @@ gcc -Iinclude src/*.c -o bin/main_cyon `pkg-config --cflags --libs gtk+-3.0` -lp
 
 # cyon_notes standalone notes editor
 gcc $(pkg-config --cflags gtk+-3.0) -o bin/cyon_notes src/cyon_notes.c $(pkg-config --libs gtk+-3.0) -lpthread
+
+# cyon_shell (no AI/bot variant)
+gcc -Iinclude src/main_cyon_shell.c src/downloader.c -o bin/main_cyon_shell `pkg-config --cflags --libs gtk+-3.0` -lpthread
 
 # CLI shell
 gcc -Iinclude cli/cyon_cli.c -o bin/cyon_cli
@@ -203,6 +209,9 @@ gcc -Iinclude cli/cyon_netscan.c -o bin/cyon_netscan
 ```bash
 # GTK control panel (main app)
 ./bin/main_cyon
+
+# GTK shell panel (no AI/bot version)
+./bin/main_cyon_shell
 
 # Standalone CLI (when the GUI is too much GUI)
 ./bin/cyon_cli
@@ -398,6 +407,8 @@ Select option **9** from the `compile_cyon` menu. You will be asked to confirm b
 
 The uninstaller removes:
 - `~/.local/share/applications/cyon.desktop` — the desktop launcher entry
+- `~/.local/share/applications/cyon_notes.desktop` — the notes editor entry
+- `~/.local/share/applications/cyon_shell.desktop` — the shell panel entry (if installed)
 - `~/pyra_env` — the Python virtual environment (goodbye, sweet venv)
 - The Pyra PATH block from `~/.bashrc`
 - The entire Cyon source and binary directory (all of it)
