@@ -350,11 +350,88 @@ class EditorTab:
         self.text_buffer.connect("changed", self._on_text_changed)
         self._update_line_numbers()
 
+        # drag-select auto-scroll state
+        self._autoscroll_timer = None
+        self._autoscroll_speed = 0.0
+
+        self.text_view.add_events(Gdk.EventMask.POINTER_MOTION_MASK)
+        self.text_view.connect("motion-notify-event",  self._on_motion)
+        self.text_view.connect("button-release-event", self._on_button_release)
+
     def _update_line_numbers(self, *_):
         count = self.text_buffer.get_line_count()
         width = len(str(count))
         nums  = "\n".join(str(i).rjust(width) for i in range(1, count + 1))
         self.line_buf.set_text(nums)
+
+    # ── drag-select auto-scroll ───────────────────────────────────────────
+    # Zone: 40 px from top/bottom edge. Speed scales quadratically with
+    # proximity. Timer fires every 30 ms and nudges the vadjustment.
+
+    _AUTOSCROLL_ZONE = 60
+    _AUTOSCROLL_MS   = 20
+    _AUTOSCROLL_MAX  = 40.0
+
+    def _autoscroll_tick(self):
+        vadj = self.scroll.get_vadjustment()
+        val  = vadj.get_value()
+        top  = vadj.get_lower()
+        bot  = vadj.get_upper() - vadj.get_page_size()
+        nxt  = max(top, min(bot, val + self._autoscroll_speed))
+        vadj.set_value(nxt)
+        if (self._autoscroll_speed < 0 and nxt <= top) or \
+           (self._autoscroll_speed > 0 and nxt >= bot):
+            self._autoscroll_timer = None
+            return False
+        return True
+
+    def _autoscroll_stop(self):
+        if self._autoscroll_timer is not None:
+            GLib.source_remove(self._autoscroll_timer)
+            self._autoscroll_timer = None
+        self._autoscroll_speed = 0.0
+
+    def _on_motion(self, widget, event):
+        if not (event.state & Gdk.ModifierType.BUTTON1_MASK):
+            self._autoscroll_stop()
+            return False
+
+        alloc = self.scroll.get_allocation()
+        h     = alloc.height
+        zone  = self._AUTOSCROLL_ZONE
+
+        # Use root-window Y coords for both cursor and scroll widget so we
+        # still get a valid position when the cursor leaves the text_view.
+        scroll_win = self.scroll.get_window()
+        if scroll_win is None:
+            return False
+        _ok, scroll_root_x, scroll_root_y = scroll_win.get_origin()
+
+        sy = int(event.y_root) - scroll_root_y
+
+        speed = 0.0
+
+        if sy < zone:
+            ratio = 1.0 - max(0.0, min(1.0, sy / zone))
+            speed = -(ratio ** 2) * self._AUTOSCROLL_MAX
+        elif sy > h - zone:
+            ratio = max(0.0, min(1.0, (sy - (h - zone)) / zone))
+            speed = (ratio ** 2) * self._AUTOSCROLL_MAX
+
+        if speed == 0.0:
+            self._autoscroll_stop()
+            return False
+
+        self._autoscroll_speed = speed
+        if self._autoscroll_timer is None:
+            self._autoscroll_timer = GLib.timeout_add(
+                self._AUTOSCROLL_MS, self._autoscroll_tick)
+        return False
+
+    def _on_button_release(self, widget, event):
+        if event.button == 1:
+            self._autoscroll_stop()
+        return False
 
     def _sync_line_scroll(self, *_):
         val  = self.scroll.get_vadjustment().get_value()
@@ -1154,8 +1231,8 @@ class PyraNotesWindow(Gtk.Window):
         # label
         cr.set_source_rgb(0.0, 1.0, 0.4)
         cr.select_font_face("monospace", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_NORMAL)
-        cr.set_font_size(9.0)
-        cr.move_to(4, h - 4)
+        cr.set_font_size(11.0)
+        cr.move_to(4, h - 6)
         cr.show_text(f"{self._ram_samples[-1]:.1f} MB")
         return False
 
