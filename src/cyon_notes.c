@@ -241,6 +241,10 @@ typedef struct {
     guint          undo_timer;    /* pending undo snapshot timeout id, 0=none */
     int            last_line_count; /* for cheap line-number change detection */
 
+    /* drag-select auto-scroll */
+    guint          autoscroll_timer; /* g_timeout id, 0 = not running */
+    gdouble        autoscroll_speed; /* px per tick — negative = up */
+
     /* dirty-line tracking for incremental highlight */
     GArray        *dirty_lines;   /* sorted array of gint line numbers */
     gboolean       hl_full_pending; /* full rehighlight needed (e.g. load) */
@@ -596,6 +600,108 @@ static void show_glitch_popup(AppState *app, gint root_x, gint root_y) {
     g_timeout_add(900, glitch_popup_close_cb, popup);
 }
 
+/* ── drag-select auto-scroll ────────────────────────────────────────────────
+ * When the user holds left button and drags near the top or bottom edge of
+ * the scrolled window, we nudge the vadjustment each tick so the view scrolls
+ * without them needing the wheel. Speed scales with proximity to the edge.
+ * Zone: 40 px from either edge. Max speed: 18 px/tick at 30 ms. */
+
+#define AUTOSCROLL_ZONE  60    /* px from edge that activates scroll */
+#define AUTOSCROLL_MS    20    /* timer interval in ms               */
+#define AUTOSCROLL_MAX   40.0  /* max px per tick                    */
+
+static gboolean autoscroll_tick(gpointer data) {
+    EditorTab     *tab  = (EditorTab *)data;
+    GtkAdjustment *vadj = gtk_scrolled_window_get_vadjustment(
+        GTK_SCROLLED_WINDOW(tab->scroll));
+
+    gdouble val  = gtk_adjustment_get_value(vadj);
+    gdouble max  = gtk_adjustment_get_upper(vadj)
+                 - gtk_adjustment_get_page_size(vadj);
+    gdouble next = val + tab->autoscroll_speed;
+
+    if (next < 0)   next = 0;
+    if (next > max) next = max;
+
+    gtk_adjustment_set_value(vadj, next);
+
+    /* stop if we've hit the document limit */
+    if ((tab->autoscroll_speed < 0 && next <= 0) ||
+        (tab->autoscroll_speed > 0 && next >= max)) {
+        tab->autoscroll_timer = 0;
+        return G_SOURCE_REMOVE;
+    }
+    return G_SOURCE_CONTINUE;
+}
+
+static void autoscroll_stop(EditorTab *tab) {
+    if (tab->autoscroll_timer) {
+        g_source_remove(tab->autoscroll_timer);
+        tab->autoscroll_timer = 0;
+    }
+    tab->autoscroll_speed = 0.0;
+}
+
+static gboolean on_textview_motion(GtkWidget *widget,
+                                   GdkEventMotion *event,
+                                   gpointer data) {
+    EditorTab *tab = (EditorTab *)data;
+
+    /* only care when left button is held (drag-select) */
+    if (!(event->state & GDK_BUTTON1_MASK)) {
+        autoscroll_stop(tab);
+        return FALSE;
+    }
+
+    /* get the scrolled window's allocation to find visible height */
+    GtkAllocation alloc;
+    gtk_widget_get_allocation(tab->scroll, &alloc);
+
+    /* event->y is relative to the text_view; translate to scroll widget.
+     * scroll_y can be negative (cursor above widget) or > h (below) —
+     * both cases must still trigger scrolling, so we do NOT clamp here. */
+    gint scroll_x, scroll_y;
+    gtk_widget_translate_coordinates(widget, tab->scroll,
+        0, (gint)event->y, &scroll_x, &scroll_y);
+
+    gdouble speed = 0.0;
+    int     h     = alloc.height;
+
+    if (scroll_y < AUTOSCROLL_ZONE) {
+        /* above or near top — scroll up.
+         * Clamp ratio to [0,1] so going further up doesn't wrap. */
+        gdouble ratio = 1.0 - CLAMP((gdouble)scroll_y / AUTOSCROLL_ZONE, 0.0, 1.0);
+        speed = -(ratio * ratio * AUTOSCROLL_MAX);
+    } else if (scroll_y > h - AUTOSCROLL_ZONE) {
+        /* below or near bottom — scroll down */
+        gdouble ratio = CLAMP((gdouble)(scroll_y - (h - AUTOSCROLL_ZONE))
+                              / AUTOSCROLL_ZONE, 0.0, 1.0);
+        speed = ratio * ratio * AUTOSCROLL_MAX;
+    }
+
+    if (speed == 0.0) {
+        autoscroll_stop(tab);
+        return FALSE;
+    }
+
+    tab->autoscroll_speed = speed;
+
+    /* start timer only if not already running */
+    if (!tab->autoscroll_timer)
+        tab->autoscroll_timer = g_timeout_add(AUTOSCROLL_MS,
+                                              autoscroll_tick, tab);
+
+    return FALSE;   /* don't consume — let GTK extend the selection */
+}
+
+static gboolean on_textview_button_release_autoscroll(GtkWidget *widget,
+                                                       GdkEventButton *event,
+                                                       gpointer data) {
+    if (event->button == 1)
+        autoscroll_stop((EditorTab *)data);
+    return FALSE;
+}
+
 static gboolean on_textview_button_press(GtkWidget *widget,
                                          GdkEventButton *event,
                                          gpointer data) {
@@ -875,6 +981,13 @@ static EditorTab *tab_new(AppState *app, const char *path) {
     g_signal_connect(tab->text_view, "button-press-event",
         G_CALLBACK(on_textview_button_press), tab);
 
+    /* drag-select auto-scroll */
+    gtk_widget_add_events(tab->text_view, GDK_POINTER_MOTION_MASK);
+    g_signal_connect(tab->text_view, "motion-notify-event",
+        G_CALLBACK(on_textview_motion), tab);
+    g_signal_connect(tab->text_view, "button-release-event",
+        G_CALLBACK(on_textview_button_release_autoscroll), tab);
+
     /* ── tab label: name + close button ──────────────────────────── */
     GtkWidget *label_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
     tab->tab_label = gtk_label_new("untitled");
@@ -946,8 +1059,9 @@ static void on_tab_close_clicked(GtkButton *btn, GtkWidget *page) {
         gint idx = gtk_notebook_page_num(GTK_NOTEBOOK(app->notebook), page);
         gtk_notebook_remove_page(GTK_NOTEBOOK(app->notebook), idx);
         /* cancel any pending debounce timers before freeing */
-        if (tab->hl_timer)   { g_source_remove(tab->hl_timer);   tab->hl_timer   = 0; }
-        if (tab->undo_timer) { g_source_remove(tab->undo_timer); tab->undo_timer = 0; }
+        if (tab->hl_timer)         { g_source_remove(tab->hl_timer);         tab->hl_timer         = 0; }
+        if (tab->undo_timer)       { g_source_remove(tab->undo_timer);       tab->undo_timer       = 0; }
+        if (tab->autoscroll_timer) { g_source_remove(tab->autoscroll_timer); tab->autoscroll_timer = 0; }
         /* free the tab */
         undo_stack_free(&tab->undo_stack);
         undo_stack_free(&tab->redo_stack);
@@ -2802,8 +2916,8 @@ static gboolean on_ram_draw(GtkWidget *widget, cairo_t *cr, AppState *app) {
     cairo_set_source_rgb(cr, app->ram_col_text[0], app->ram_col_text[1], app->ram_col_text[2]);
     cairo_select_font_face(cr, "monospace",
         CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
-    cairo_set_font_size(cr, 9.0);
-    cairo_move_to(cr, 4, h - 4);
+    cairo_set_font_size(cr, 11.0);
+    cairo_move_to(cr, 4, h - 6);
     cairo_show_text(cr, lbl);
 
     return FALSE;
