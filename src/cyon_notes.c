@@ -309,6 +309,9 @@ struct _AppState {
     double         ram_col_grid[3]; /* grid RGB */
     double         ram_col_text[3]; /* label RGB */
 
+    /* log colors */
+    GtkTextTag    *log_tag_amber;
+
     /* layout — saved/restored */
     GtkWidget     *paned;           /* main h-paned for tree position */
 
@@ -527,13 +530,131 @@ static void on_buf_delete(GtkTextBuffer *buf, GtkTextIter *start,
 
 static void hl_apply_lines(AppState *app, EditorTab *tab);
 
+/* ── click scroll guard ─────────────────────────────────────────────────────
+ * GTK's GtkTextView calls gtk_text_view_scroll_mark_onscreen on every click,
+ * jumping the view to wherever the cursor lands even if the view is already
+ * showing that area. We intercept button-press, save scroll, and restore it
+ * after GTK finishes its internal scroll. */
+
+typedef struct { GtkAdjustment *adj; gdouble val; } ClickScrollGuard;
+
+static gboolean click_scroll_restore_cb(gpointer data) {
+    ClickScrollGuard *g = data;
+    gtk_adjustment_set_value(g->adj, g->val);
+    g_free(g);
+    return G_SOURCE_REMOVE;
+}
+
+/* ── glitch popup ───────────────────────────────────────────────────────────
+ * A small undecorated window that appears near the click spot, holds for
+ * 900ms, then destroys itself. Owns the scroll-restore flicker. */
+
+static gboolean glitch_popup_close_cb(gpointer data) {
+    GtkWidget *win = GTK_WIDGET(data);
+    gtk_widget_destroy(win);
+    return G_SOURCE_REMOVE;
+}
+
+static void show_glitch_popup(AppState *app, gint root_x, gint root_y) {
+    /* Only fire occasionally — 1 in 4 clicks, keeps it from getting annoying */
+    if (g_random_int_range(0, 4) != 0) return;
+
+    GtkWidget *popup = gtk_window_new(GTK_WINDOW_POPUP);
+    gtk_window_set_transient_for(GTK_WINDOW(popup), GTK_WINDOW(app->window));
+    gtk_window_set_resizable(GTK_WINDOW(popup), FALSE);
+    gtk_window_set_decorated(GTK_WINDOW(popup), FALSE);
+    gtk_window_set_skip_taskbar_hint(GTK_WINDOW(popup), TRUE);
+    gtk_window_set_skip_pager_hint(GTK_WINDOW(popup), TRUE);
+    gtk_window_set_keep_above(GTK_WINDOW(popup), TRUE);
+
+    /* Style scoped to popup widget only — NOT screen-wide */
+    GtkCssProvider *css = gtk_css_provider_new();
+    gtk_css_provider_load_from_data(css,
+        "* { background-color: #05050a; border: 1px solid #E8A020; }"
+        "label { color: #00ff99; font-family: monospace; font-size: 12px;"
+        "        padding: 8px 14px; }",
+        -1, NULL);
+    gtk_style_context_add_provider(
+        gtk_widget_get_style_context(popup),
+        GTK_STYLE_PROVIDER(css),
+        GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+    g_object_unref(css);
+
+    GtkWidget *lbl = gtk_label_new(
+        "> GLITCH EVENT DETECTED\n"
+        "  this was a bug.\n"
+        "  now it's a feature.\n"
+        "  -- cruxibulum");
+    gtk_label_set_justify(GTK_LABEL(lbl), GTK_JUSTIFY_LEFT);
+    gtk_container_add(GTK_CONTAINER(popup), lbl);
+
+    /* Position near click, nudge so it doesn't sit under the cursor */
+    gtk_window_move(GTK_WINDOW(popup), root_x + 12, root_y + 12);
+    gtk_widget_show_all(popup);
+
+    /* Auto-close after 900ms */
+    g_timeout_add(900, glitch_popup_close_cb, popup);
+}
+
+static gboolean on_textview_button_press(GtkWidget *widget,
+                                         GdkEventButton *event,
+                                         gpointer data) {
+    EditorTab *tab = (EditorTab *)data;
+    GtkAdjustment *vadj = gtk_scrolled_window_get_vadjustment(
+        GTK_SCROLLED_WINDOW(tab->scroll));
+    gdouble current = gtk_adjustment_get_value(vadj);
+
+    /* Schedule restore AFTER GTK processes the click and moves the mark */
+    ClickScrollGuard *g1 = g_new(ClickScrollGuard, 1);
+    g1->adj = vadj; g1->val = current;
+    g_idle_add(click_scroll_restore_cb, g1);
+
+    ClickScrollGuard *g2 = g_new(ClickScrollGuard, 1);
+    g2->adj = vadj; g2->val = current;
+    g_timeout_add(50, click_scroll_restore_cb, g2);
+
+    /* glitch popup — near the click, auto-closes, occasional */
+    if (event->button == 1)
+        show_glitch_popup(tab->app,
+                          (gint)event->x_root,
+                          (gint)event->y_root);
+
+    return FALSE;  /* don't block the event — let GTK place the cursor normally */
+}
+
+/* forward — ScrollRestore is defined after this function in the file */
+static gboolean hl_scroll_restore_cb(gpointer data) {
+    GtkAdjustment *adj = ((GtkAdjustment **)data)[0];
+    gdouble        val = *((gdouble *)(((GtkAdjustment **)data) + 1));
+    gtk_adjustment_set_value(adj, val);
+    g_free(data);
+    return G_SOURCE_REMOVE;
+}
+
+static gpointer make_scroll_data(GtkAdjustment *adj, gdouble val) {
+    /* Pack adj pointer + double into a single g_malloc'd block */
+    guchar *block = g_malloc(sizeof(GtkAdjustment *) + sizeof(gdouble));
+    *(GtkAdjustment **)block = adj;
+    *(gdouble *)(block + sizeof(GtkAdjustment *)) = val;
+    return block;
+}
+
 static gboolean hl_deferred_cb(EditorTab *tab) {
     tab->hl_timer = 0;
     if (tab->hl_full_pending) {
         tab->hl_full_pending = FALSE;
-        hl_apply(tab->app, tab->text_buf);  /* full pass for load/etc */
+        /* Save scroll before full highlight — tag signals can trigger
+         * scroll-to-cursor internally and jump view to top */
+        GtkAdjustment *vadj = gtk_scrolled_window_get_vadjustment(
+            GTK_SCROLLED_WINDOW(tab->scroll));
+        gdouble saved = gtk_adjustment_get_value(vadj);
+        hl_apply(tab->app, tab->text_buf);
+        /* Restore twice: idle catches the first reset, timeout catches
+         * any secondary reset from focus or tag layout events */
+        g_idle_add(hl_scroll_restore_cb, make_scroll_data(vadj, saved));
+        g_timeout_add(80, hl_scroll_restore_cb, make_scroll_data(vadj, saved));
     } else {
-        hl_apply_lines(tab->app, tab);       /* incremental: dirty lines only */
+        hl_apply_lines(tab->app, tab);
     }
     return G_SOURCE_REMOVE;
 }
@@ -624,11 +745,14 @@ static void tab_load_file(EditorTab *tab, const char *path) {
     tab_update_label(tab);
     app_log(tab->app, "▸ Loaded: %s", path);
 
-    /* restore scroll asynchronously to avoid jump */
-    ScrollRestore *sr = g_new(ScrollRestore, 1);
-    sr->adj = vadj;
-    sr->val = scroll_pos;
-    g_idle_add((GSourceFunc)restore_scroll_cb, sr);
+    /* Restore scroll twice — idle fires first, but GTK may reset again on
+     * focus-in or tag changes; the 80ms timeout catches that second reset. */
+    ScrollRestore *sr1 = g_new(ScrollRestore, 1);
+    sr1->adj = vadj; sr1->val = scroll_pos;
+    g_idle_add((GSourceFunc)restore_scroll_cb, sr1);
+    ScrollRestore *sr2 = g_new(ScrollRestore, 1);
+    sr2->adj = vadj; sr2->val = scroll_pos;
+    g_timeout_add(80, (GSourceFunc)restore_scroll_cb, sr2);
 }
 
 /* ── confirm close (unsaved changes dialog) ─────────────────────────────── */
@@ -747,6 +871,10 @@ static EditorTab *tab_new(AppState *app, const char *path) {
     g_signal_connect(tab->text_buf, "mark-set",
         G_CALLBACK(on_cursor_moved), app);
 
+    /* Intercept clicks to prevent GTK's scroll-to-cursor from jumping the view */
+    g_signal_connect(tab->text_view, "button-press-event",
+        G_CALLBACK(on_textview_button_press), tab);
+
     /* ── tab label: name + close button ──────────────────────────── */
     GtkWidget *label_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
     tab->tab_label = gtk_label_new("untitled");
@@ -772,19 +900,20 @@ static EditorTab *tab_new(AppState *app, const char *path) {
     g_signal_connect(close_btn, "clicked",
         G_CALLBACK(on_tab_close_clicked), tab->scroll);
 
-    /* ── load file and preserve scroll ── */
-    if (path) {
-        tab_load_file(tab, path);
-    }
-
     gtk_notebook_set_current_page(GTK_NOTEBOOK(app->notebook), page_idx);
     gtk_widget_show_all(app->notebook);
 
     gtk_entry_set_text(GTK_ENTRY(app->filename_entry),
         path ? tab_display_name(tab) : "");
 
-    /* grab focus after realization */
-    g_idle_add((GSourceFunc)gtk_widget_grab_focus, tab->text_view);
+    /* Grab focus FIRST so GTK fires its internal scroll-to-cursor on an empty
+     * buffer — then tab_load_file loads content and the deferred restore wins. */
+    gtk_widget_grab_focus(tab->text_view);
+
+    /* ── load file after focus grab ── */
+    if (path) {
+        tab_load_file(tab, path);
+    }
 
     tab_update_line_numbers(tab);
     return tab;
@@ -850,13 +979,64 @@ static void app_log(AppState *app, const char *fmt, ...) {
     gtk_text_buffer_get_end_iter(app->log_buf, &end);
     gtk_text_buffer_insert(app->log_buf, &end, msg, -1);
     gtk_text_buffer_insert(app->log_buf, &end, "\n", -1);
-    gtk_text_view_scroll_to_iter(GTK_TEXT_VIEW(app->log_view),
-        &end, 0.0, FALSE, 0.0, 0.0);
+
+    /* Scroll to end using a mark — more reliable than scroll_to_iter
+     * because marks stay valid after buffer changes and GTK layout */
+    GtkTextMark *mark = gtk_text_buffer_get_mark(app->log_buf, "log-end");
+    if (!mark) {
+        gtk_text_buffer_get_end_iter(app->log_buf, &end);
+        mark = gtk_text_buffer_create_mark(app->log_buf, "log-end", &end, FALSE);
+    } else {
+        gtk_text_buffer_get_end_iter(app->log_buf, &end);
+        gtk_text_buffer_move_mark(app->log_buf, mark, &end);
+    }
+    gtk_text_view_scroll_mark_onscreen(GTK_TEXT_VIEW(app->log_view), mark);
+
     gtk_label_set_text(GTK_LABEL(app->status_label), msg);
     g_free(msg);
 }
 
-/* ── font size ──────────────────────────────────────────────────────────── */
+static void app_log_amber(AppState *app, const char *fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    char *msg = g_strdup_vprintf(fmt, args);
+    va_end(args);
+
+    /* create amber tag once */
+    if (!app->log_tag_amber)
+        app->log_tag_amber = gtk_text_buffer_create_tag(
+            app->log_buf, "log-amber",
+            "foreground", "#E8A020", NULL);
+
+    GtkTextIter start, end;
+    gtk_text_buffer_get_end_iter(app->log_buf, &start);
+    gtk_text_buffer_insert(app->log_buf, &start, msg, -1);
+    gtk_text_buffer_get_end_iter(app->log_buf, &end);
+    gtk_text_buffer_insert(app->log_buf, &end, "\n", -1);
+
+    /* re-get start after insert invalidated it */
+    gint line = gtk_text_iter_get_line(&end) - 1;
+    GtkTextIter ls, le;
+    gtk_text_buffer_get_iter_at_line(app->log_buf, &ls, line);
+    le = ls;
+    gtk_text_iter_forward_to_line_end(&le);
+    gtk_text_buffer_apply_tag(app->log_buf, app->log_tag_amber, &ls, &le);
+
+    GtkTextMark *mark = gtk_text_buffer_get_mark(app->log_buf, "log-end");
+    if (!mark) {
+        gtk_text_buffer_get_end_iter(app->log_buf, &end);
+        mark = gtk_text_buffer_create_mark(app->log_buf, "log-end", &end, FALSE);
+    } else {
+        gtk_text_buffer_get_end_iter(app->log_buf, &end);
+        gtk_text_buffer_move_mark(app->log_buf, mark, &end);
+    }
+    gtk_text_view_scroll_mark_onscreen(GTK_TEXT_VIEW(app->log_view), mark);
+
+    gtk_label_set_text(GTK_LABEL(app->status_label), msg);
+    g_free(msg);
+}
+
+
 
 static void app_apply_font_size(AppState *app) {
     char css[256];
@@ -2428,8 +2608,25 @@ static void on_tree_row_activated(GtkTreeView *tv, GtkTreePath *path,
     gtk_tree_model_get_iter(GTK_TREE_MODEL(app->tree_store), &it, path);
     char *fpath = NULL;
     gtk_tree_model_get(GTK_TREE_MODEL(app->tree_store), &it, 1, &fpath, -1);
-    if (fpath && g_file_test(fpath, G_FILE_TEST_IS_REGULAR))
-        tab_new(app, fpath);
+
+    if (!fpath || !g_file_test(fpath, G_FILE_TEST_IS_REGULAR)) {
+        g_free(fpath);
+        return;
+    }
+
+    /* If already open in a tab, just switch to it — avoids reload+scroll jump */
+    int n_pages = gtk_notebook_get_n_pages(GTK_NOTEBOOK(app->notebook));
+    for (int i = 0; i < n_pages; i++) {
+        GtkWidget *page = gtk_notebook_get_nth_page(GTK_NOTEBOOK(app->notebook), i);
+        EditorTab *tab  = g_object_get_data(G_OBJECT(page), "editor-tab");
+        if (tab && tab->current_file && strcmp(tab->current_file, fpath) == 0) {
+            gtk_notebook_set_current_page(GTK_NOTEBOOK(app->notebook), i);
+            g_free(fpath);
+            return;
+        }
+    }
+
+    tab_new(app, fpath);
     g_free(fpath);
 }
 
@@ -2611,23 +2808,39 @@ static void on_hl_toggle(GtkButton *btn, AppState *app) {
     gtk_button_set_label(btn, app->hl_enabled ? "HL ON" : "HL OFF");
 
     if (app->hl_enabled) {
-        /* mark visible region of each tab dirty and kick the timer */
+        /* Save scroll positions for all tabs before triggering highlight —
+         * tag apply/remove signals cause GTK to scroll-to-cursor internally */
         int n = gtk_notebook_get_n_pages(GTK_NOTEBOOK(app->notebook));
-        for (int i = 0; i < n; i++) {
+        gdouble saved[64] = {0};  /* save up to 64 tabs */
+        GtkAdjustment *adjs[64]  = {NULL};
+        for (int i = 0; i < n && i < 64; i++) {
             GtkWidget *pg = gtk_notebook_get_nth_page(GTK_NOTEBOOK(app->notebook), i);
             EditorTab *t  = g_object_get_data(G_OBJECT(pg), "editor-tab");
             if (!t) continue;
-            tab_mark_visible_dirty(t);
-            if (!t->hl_timer)
-                t->hl_timer = g_timeout_add(80, (GSourceFunc)hl_deferred_cb, t);
+            adjs[i]  = gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(t->scroll));
+            saved[i] = gtk_adjustment_get_value(adjs[i]);
+            /* use full highlight pass so hl_deferred_cb's scroll restore fires */
+            t->hl_full_pending = TRUE;
+            if (t->hl_timer) { g_source_remove(t->hl_timer); t->hl_timer = 0; }
+            t->hl_timer = g_timeout_add(80, (GSourceFunc)hl_deferred_cb, t);
+        }
+        /* Also restore from here as a belt-and-suspenders fallback */
+        for (int i = 0; i < n && i < 64; i++) {
+            if (!adjs[i]) continue;
+            g_idle_add(hl_scroll_restore_cb, make_scroll_data(adjs[i], saved[i]));
+            g_timeout_add(160, hl_scroll_restore_cb, make_scroll_data(adjs[i], saved[i]));
         }
     } else {
-        /* strip all highlight tags from all open tabs */
+        /* strip all highlight tags — save/restore scroll since remove_tag
+         * also triggers internal scroll-to-cursor */
         int n = gtk_notebook_get_n_pages(GTK_NOTEBOOK(app->notebook));
         for (int i = 0; i < n; i++) {
             GtkWidget  *pg  = gtk_notebook_get_nth_page(GTK_NOTEBOOK(app->notebook), i);
             EditorTab  *t   = g_object_get_data(G_OBJECT(pg), "editor-tab");
             if (!t) continue;
+            GtkAdjustment *vadj = gtk_scrolled_window_get_vadjustment(
+                GTK_SCROLLED_WINDOW(t->scroll));
+            gdouble saved = gtk_adjustment_get_value(vadj);
             GtkTextIter s, e;
             gtk_text_buffer_get_bounds(t->text_buf, &s, &e);
             for (int j = 0; j < app->hl_group_count; j++)
@@ -2639,9 +2852,395 @@ static void on_hl_toggle(GtkButton *btn, AppState *app) {
             if (app->hl_tag_dot_l)   gtk_text_buffer_remove_tag(t->text_buf, app->hl_tag_dot_l,   &s, &e);
             if (app->hl_tag_dot_r)   gtk_text_buffer_remove_tag(t->text_buf, app->hl_tag_dot_r,   &s, &e);
             if (app->hl_tag_steel)   gtk_text_buffer_remove_tag(t->text_buf, app->hl_tag_steel,   &s, &e);
+            g_idle_add(hl_scroll_restore_cb, make_scroll_data(vadj, saved));
+            g_timeout_add(80, hl_scroll_restore_cb, make_scroll_data(vadj, saved));
         }
     }
     app_log(app, "▸ Highlighting %s.", app->hl_enabled ? "on" : "off");
+}
+
+/* ── README / about window ──────────────────────────────────────────────── */
+
+static const char *README_TEXT =
+"╔══════════════════════════════════════════════════════════════╗\n"
+"║          CYON NOTES  //  TTS  //  README.txt                 ║\n"
+"║          by Ioannes Cruxibulum                               ║\n"
+"║          est. 2023  |  still compiling  |  send help         ║\n"
+"╚══════════════════════════════════════════════════════════════╝\n"
+"\n"
+"  welcome to cyon_notes. you didn't ask for it.\n"
+"  it's here anyway. buckle up.\n"
+"\n"
+"──────────────────────────────────────────────────────────────\n"
+" WHAT IS THIS\n"
+"──────────────────────────────────────────────────────────────\n"
+"\n"
+"  a text editor. yes, another one. no, it's not VS Code.\n"
+"  no, it's not Sublime. those are for people who like\n"
+"  paying for things or waiting for electron to load.\n"
+"  this is GTK3, C, and raw willpower.\n"
+"\n"
+"  it was built from scratch over 5 years as part of the\n"
+"  CYON desktop environment. cyon sits on top. pyra is\n"
+"  underneath. pyra is where the dragons live.\n"
+"  you are currently in cyon. you are safe. probably.\n"
+"\n"
+"──────────────────────────────────────────────────────────────\n"
+" FEATURES  (they work, we checked, mostly)\n"
+"──────────────────────────────────────────────────────────────\n"
+"\n"
+"  TABS\n"
+"    multiple tabs. yes. we live in 2024.\n"
+"    Ctrl+T = new tab.  click the X to close one.\n"
+"    reorderable via drag and drop like a civilized human.\n"
+"\n"
+"  SAVING\n"
+"    Ctrl+S saves. if you don't Ctrl+S you will lose your work.\n"
+"    this is not a bug. this is a life lesson.\n"
+"    files save as .txt. the extension is added automatically.\n"
+"    you're welcome.\n"
+"\n"
+"  UNDO / REDO\n"
+"    Ctrl+Z = undo.  Ctrl+Y = redo.\n"
+"    up to 300 undo steps. if you need more than 300 undos\n"
+"    that's a you problem, not a cyon_notes problem.\n"
+"\n"
+"  SYNTAX HIGHLIGHTING\n"
+"    press HL OFF to turn it on. yes the button says OFF.\n"
+"    that means highlighting is currently OFF and you can\n"
+"    turn it ON by clicking the button that says OFF.\n"
+"    this confused everyone. this comment exists because of that.\n"
+"    supports: keywords, strings, comments, dot notation,\n"
+"    class names, = operators, @staticmethod.\n"
+"    configured via cyon_notes.conf. go nuts.\n"
+"\n"
+"  LINE NUMBERS\n"
+"    they're on the left. they count up. that's their whole job.\n"
+"    they're very good at it.\n"
+"\n"
+"  AUTO-INDENT\n"
+"    press Enter after a colon and it indents for you.\n"
+"    press Backspace on an indent and it un-indents.\n"
+"    like a real editor. because this is a real editor.\n"
+"\n"
+"  AUTO-CLOSE BRACKETS\n"
+"    type ( and get (). type [ and get []. type { and get {}.\n"
+"    type ' and get ''. type \" and get \"\".\n"
+"    cursor lands in the middle, ready to type.\n"
+"    if you hate this: ctrl+z immediately after. it leaves.\n"
+"\n"
+"  CTRL+/ TOGGLE COMMENT\n"
+"    select lines, hit Ctrl+/. they become # comments.\n"
+"    hit Ctrl+/ again. they stop being # comments.\n"
+"    works on single lines too. very efficient.\n"
+"    very 10x developer energy.\n"
+"\n"
+"  CTRL+D DUPLICATE LINE\n"
+"    duplicates the current line downward.\n"
+"    use responsibly. or don't. we're a README not a cop.\n"
+"\n"
+"  CTRL+SCROLL ZOOM\n"
+"    scroll while holding Ctrl to resize text.\n"
+"    range: 8px to 36px. for when your eyes need a break\n"
+"    or you're presenting to someone across the room.\n"
+"\n"
+"  FILE TREE\n"
+"    the panel on the right. shows your files.\n"
+"    double-click to open. if the file is already open\n"
+"    it switches to that tab instead of opening a duplicate.\n"
+"    because we're not animals.\n"
+"    click FOLDER to point it at a directory.\n"
+"    click the refresh button when the tree lies to you.\n"
+"    HIDE TREE in the FILE menu if you need the space.\n"
+"\n"
+"  TTS  (text to speech)\n"
+"    requires piper + aplay. if you don't have those,\n"
+"    the buttons still work, they just do nothing.\n"
+"    select some text, click SELECTION. it reads it.\n"
+"    click ALL and it reads the whole file.\n"
+"    click STOP when you've heard enough.\n"
+"    JOE = male voice.  LESSAC = female voice.\n"
+"    configure paths in cyon_notes.conf.\n"
+"\n"
+"  RAM GRAPH\n"
+"    bottom right corner. little graph. watches your RAM.\n"
+"    updates every second. purely for vibes.\n"
+"    green line = current usage. amber glow = style.\n"
+"    if the line goes to the top: close some tabs, maybe.\n"
+"\n"
+"  SESSION RESTORE\n"
+"    when you close and reopen, your tabs come back.\n"
+"    window size, pane position, active tab — all restored.\n"
+"    like nothing ever happened. very chill.\n"
+"\n"
+"  SINGLE INSTANCE LOCK\n"
+"    try to open cyon_notes twice. go ahead.\n"
+"    it will tell you no. one instance only.\n"
+"    this is a feature. you only need one.\n"
+"\n"
+"──────────────────────────────────────────────────────────────\n"
+" KNOWN ISSUES\n"
+"──────────────────────────────────────────────────────────────\n"
+"\n"
+"  - the scroll position sometimes flickers when you click.\n"
+"    this was a bug. now it's a feature. -- cruxibulum\n"
+"\n"
+"  - the HL button says OFF when highlighting is OFF.\n"
+"    this is technically correct. the worst kind of correct.\n"
+"\n"
+"  - if pyra_lib is missing, pyra_toolz will tell you.\n"
+"    cyon_notes doesn't care. cyon_notes stands alone.\n"
+"\n"
+"──────────────────────────────────────────────────────────────\n"
+" KEYBOARD SHORTCUTS  (the ones worth knowing)\n"
+"──────────────────────────────────────────────────────────────\n"
+"\n"
+"  Ctrl+S        save\n"
+"  Ctrl+Z        undo\n"
+"  Ctrl+Y        redo\n"
+"  Ctrl+T        new tab\n"
+"  Ctrl+/        toggle comment\n"
+"  Ctrl+D        duplicate line\n"
+"  Ctrl+scroll   zoom text\n"
+"  Tab           indent\n"
+"  Shift+Tab     unindent\n"
+"\n"
+"──────────────────────────────────────────────────────────────\n"
+" CONFIGURATION  (cyon_notes.conf)\n"
+"──────────────────────────────────────────────────────────────\n"
+"\n"
+"  lives in ~/cyon/src/cyon_notes.conf\n"
+"  sections: [editor] [tts] [session] [ram_graph]\n"
+"  and one or more [highlight_group_N] sections.\n"
+"  edit it with any text editor. including this one.\n"
+"  very meta. very cyon.\n"
+"\n"
+"──────────────────────────────────────────────────────────────\n"
+" DEPENDENCIES  (congrats, you already have them)\n"
+"──────────────────────────────────────────────────────────────\n"
+"\n"
+"  if you are reading this, the program compiled and ran.\n"
+"  which means you already have everything listed below.\n"
+"  this section exists purely for completeness.\n"
+"  and to make the README longer. mostly that.\n"
+"\n"
+"  GTK3\n"
+"    sudo apt install libgtk-3-dev\n"
+"    (you have this. we know. you know. everyone knows.)\n"
+"\n"
+"  GLib\n"
+"    comes with GTK3. you didn't even have to ask.\n"
+"    very polite library.\n"
+"\n"
+"  GCC\n"
+"    sudo apt install build-essential\n"
+"    (it compiled. gcc was there. this is not news.)\n"
+"\n"
+"  piper TTS  (optional, for the TTS buttons to do anything)\n"
+"    pip install piper-tts\n"
+"    voice models go in ~/cyon/piper_models/\n"
+"    without this: TTS buttons sit there looking pretty.\n"
+"    they're fine with it.\n"
+"\n"
+"  aplay  (optional, also for TTS)\n"
+"    sudo apt install alsa-utils\n"
+"    piper pipes into aplay. no aplay, no audio.\n"
+"    very logical. very unix.\n"
+"\n"
+"  to build cyon_notes from source:\n"
+"    gcc $(pkg-config --cflags gtk+-3.0) -o cyon_notes cyon_notes.c \\\n"
+"         $(pkg-config --libs gtk+-3.0) -lpthread\n"
+"\n"
+"  if that command means nothing to you: ask someone.\n"
+"  if it worked: you're already in the program. hi.\n"
+"\n"
+"──────────────────────────────────────────────────────────────\n"
+" CREDITS\n"
+"──────────────────────────────────────────────────────────────\n"
+"\n"
+"  written by Ioannes Cruxibulum\n"
+"  built on: GTK3, GLib, GRegex, piper TTS, pure stubbornness\n"
+"  inspired by: needing a good editor and not finding one\n"
+"  powered by: caffeine, spite, and 5 years of iteration\n"
+"  tested on: Linux  (other OSes: not our problem)\n"
+"\n"
+"  special thanks to:\n"
+"    - the GTK documentation, for existing\n"
+"    - the GTK documentation, for being confusing enough\n"
+"      to make this take 5 years\n"
+"    - pikachu, for the error messages in pyra_toolz\n"
+"    - whoever invented Ctrl+Z\n"
+"\n"
+"  this software is provided as-is. if it breaks something\n"
+"  you probably deserved it. if it doesn't break anything\n"
+"  you're welcome.\n"
+"\n"
+"  -- cruxibulum  //  cyon project  //  est. 2023\n"
+"\n"
+"  [press OK to close this and get back to work]\n";
+
+
+/* ── boot sequence ───────────────────────────────────────────────────────── */
+
+static const char *BOOT_QUOTES[] = {
+    "▸ no bugs found. (we stopped looking.)",
+    "▸ piper is ready. whether you are is your problem.",
+    "▸ still compiling. always compiling. somewhere.",
+    "▸ GTK3: because GTK4 is someone else's problem.",
+    "▸ syntax highlighting: OFF by default. you know why.",
+    "▸ this editor replaced Sublime. Sublime doesn't know yet.",
+    "▸ 5 years in the making. 0 regrets. maybe 1.",
+    "▸ warning: may cause productivity.",
+    "▸ cyon_notes.conf: edit it. you'll know what to do.",
+    "▸ the RAM graph is purely for vibes. important vibes.",
+    "▸ single instance only. we trust you. mostly.",
+    "▸ undo stack: 300 deep. if you need more, call someone.",
+    "▸ TTS voices: joe (male) lessac (female) you (optional).",
+    "▸ welcome back. the code missed you. probably.",
+    "▸ pyra is underneath. do not go there unless you must.",
+    "▸ ctrl+z is in there. you're welcome. use it wisely.",
+    "▸ the scroll flicker was a bug. now it's a feature. -- cruxibulum",
+    "▸ linux only. other OSes: not our problem.",
+    "▸ file saved. probably. hit Ctrl+S anyway.",
+    "▸ cyon: built from scratch. held together by stubbornness.",
+};
+#define N_BOOT_QUOTES ((int)(sizeof(BOOT_QUOTES) / sizeof(BOOT_QUOTES[0])))
+
+/* boot steps: label + bar fill (out of 10) */
+typedef struct {
+    const char *label;
+    int         fill;
+} BootStep;
+
+static const BootStep BOOT_STEPS[] = {
+    { "initializing cyon_notes",        2  },
+    { "loading config",                 3  },
+    { "warming up GTK",                 4  },
+    { "checking for bugs",              5  },
+    { "none found (we stopped looking)",6  },
+    { "mounting file tree",             7  },
+    { "arming syntax engine",           8  },
+    { "bribing the RAM graph",          9  },
+    { "restoring session",              10 },
+};
+#define N_BOOT_STEPS ((int)(sizeof(BOOT_STEPS) / sizeof(BOOT_STEPS[0])))
+
+typedef struct {
+    AppState *app;
+    int       step;
+} BootState;
+
+static char *make_bar(int fill, int total) {
+    /* e.g. [████████░░] */
+    GString *s = g_string_new("[");
+    for (int i = 0; i < total; i++)
+        g_string_append(s, i < fill ? "\xe2\x96\x88" : "\xe2\x96\x91");
+    g_string_append(s, "]");
+    return g_string_free(s, FALSE);
+}
+
+/* boot_step_cb forward — called by boot_sequence before it is defined */
+static gboolean boot_step_cb(gpointer data);
+
+static void boot_sequence(AppState *app) {
+    app_log_amber(app, "▸ CYON NOTES // booting...");
+    app_log_amber(app, " ");
+    BootState *bs = g_new(BootState, 1);
+    bs->app  = app;
+    bs->step = 0;
+    g_timeout_add(80, boot_step_cb, bs);
+}
+
+static gboolean boot_sequence_once(gpointer data) {
+    boot_sequence((AppState *)data);
+    return G_SOURCE_REMOVE;
+}
+
+static gboolean boot_step_cb(gpointer data) {
+    BootState *bs = data;
+    AppState  *app = bs->app;
+    int        step = bs->step;
+    g_free(bs);
+
+    if (step < N_BOOT_STEPS) {
+        char *bar = make_bar(BOOT_STEPS[step].fill, 10);
+        app_log_amber(app, "  %s %s", bar, BOOT_STEPS[step].label);
+        g_free(bar);
+
+        BootState *next = g_new(BootState, 1);
+        next->app  = app;
+        next->step = step + 1;
+        g_timeout_add(120, boot_step_cb, next);
+    } else {
+        /* all steps done — print final bar + random quote then STOP */
+        char *bar = make_bar(10, 10);
+        app_log_amber(app, "  %s done.", bar);
+        g_free(bar);
+        app_log_amber(app, " ");
+        app_log_amber(app, "%s", BOOT_QUOTES[g_random_int_range(0, N_BOOT_QUOTES)]);
+        app_log_amber(app, " ");
+        app_log(app, "▸ Ready.");
+    }
+    return G_SOURCE_REMOVE;
+}
+
+static void on_readme(GtkMenuItem *item, AppState *app) {
+    GtkWidget *dlg = gtk_dialog_new_with_buttons(
+        "CYON NOTES // README",
+        GTK_WINDOW(app->window),
+        GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+        "OK", GTK_RESPONSE_OK,
+        NULL);
+
+    gtk_window_set_default_size(GTK_WINDOW(dlg), 680, 520);
+
+    /* style the dialog to match cyon */
+    GtkCssProvider *css = gtk_css_provider_new();
+    gtk_css_provider_load_from_data(css,
+        "dialog, dialog > box { background-color: #05050a; }"
+        "dialog > box > box > button {"
+        "  background-color: #0a1a10; color: #00ff99;"
+        "  font-family: monospace; font-size: 11px;"
+        "  border: 1px solid #1a4a28; border-radius: 2px; padding: 3px 18px; }"
+        "dialog > box > box > button:hover { border-color: #E8A020; }"
+        "dialog textview, dialog textview text {"
+        "  background-color: #05050a; color: #00cc77;"
+        "  font-family: monospace; font-size: 12px; }"
+        "dialog scrolledwindow { border: 1px solid #1a2a20; }",
+        -1, NULL);
+    gtk_style_context_add_provider_for_screen(
+        gtk_widget_get_screen(dlg),
+        GTK_STYLE_PROVIDER(css),
+        GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+    g_object_unref(css);
+
+    /* scrolled text view */
+    GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
+    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll),
+        GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+    gtk_widget_set_margin_start(scroll, 10);
+    gtk_widget_set_margin_end(scroll, 10);
+    gtk_widget_set_margin_top(scroll, 10);
+    gtk_widget_set_margin_bottom(scroll, 6);
+
+    GtkWidget *tv = gtk_text_view_new();
+    gtk_text_view_set_editable(GTK_TEXT_VIEW(tv), FALSE);
+    gtk_text_view_set_cursor_visible(GTK_TEXT_VIEW(tv), FALSE);
+    gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(tv), GTK_WRAP_NONE);
+    gtk_text_view_set_left_margin(GTK_TEXT_VIEW(tv), 10);
+    gtk_text_view_set_right_margin(GTK_TEXT_VIEW(tv), 10);
+
+    GtkTextBuffer *buf = gtk_text_view_get_buffer(GTK_TEXT_VIEW(tv));
+    gtk_text_buffer_set_text(buf, README_TEXT, -1);
+
+    gtk_container_add(GTK_CONTAINER(scroll), tv);
+
+    GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dlg));
+    gtk_box_pack_start(GTK_BOX(content), scroll, TRUE, TRUE, 0);
+    gtk_widget_show_all(dlg);
+
+    gtk_dialog_run(GTK_DIALOG(dlg));
+    gtk_widget_destroy(dlg);
 }
 
 static void build_ui(AppState *app) {
@@ -2679,7 +3278,7 @@ static void build_ui(AppState *app) {
     gtk_container_add(GTK_CONTAINER(app->window), outer);
 
     /* title */
-    GtkWidget *title = gtk_label_new("▸ CYON DEV NOTES // TTS");
+    GtkWidget *title = gtk_label_new("⬡ CYON DEV NOTES // TTS [WARN]                        ☢ GtkLabel: Exists only to judge you silently. ☢ ");
     gtk_style_context_add_class(gtk_widget_get_style_context(title), "title-label");
     gtk_widget_set_halign(title, GTK_ALIGN_START);
     gtk_box_pack_start(GTK_BOX(outer), title, FALSE, FALSE, 0);
@@ -2704,21 +3303,23 @@ static void build_ui(AppState *app) {
     /* FILE menu */
     app->file_menu = gtk_menu_new();
     struct { const char *label; GCallback cb; } menu_items[] = {
-        { "NEW TAB",       G_CALLBACK(on_new_tab)      },
-        { "NEW",           G_CALLBACK(on_new)           },
-        { "LOAD",          G_CALLBACK(on_load)          },
-        { "SAVE",          G_CALLBACK(on_save)          },
-        { "SAVE AS",       G_CALLBACK(on_save_as)       },
+        { "◆ NEW TAB",       G_CALLBACK(on_new_tab)      },
+        { "◆ NEW",           G_CALLBACK(on_new)           },
+        { "◆ LOAD",          G_CALLBACK(on_load)          },
+        { "◆ SAVE",          G_CALLBACK(on_save)          },
+        { "◆ SAVE AS",       G_CALLBACK(on_save_as)       },
         { NULL,            NULL                         },
-        { "UNDO  Ctrl+Z",  G_CALLBACK(on_undo)          },
-        { "REDO  Ctrl+Y",  G_CALLBACK(on_redo)          },
+        { "◆ UNDO  Ctrl+Z",  G_CALLBACK(on_undo)          },
+        { "◆ REDO  Ctrl+Y",  G_CALLBACK(on_redo)          },
         { NULL,            NULL                         },
-        { "DELETE FILE",   G_CALLBACK(on_delete_file)   },
+        { "◆ DELETE FILE",   G_CALLBACK(on_delete_file)   },
         { NULL,            NULL                         },
-        { "TEXT  +",       G_CALLBACK(on_text_size_inc) },
-        { "TEXT  −",       G_CALLBACK(on_text_size_dec) },
+        { "◆ TEXT  +",       G_CALLBACK(on_text_size_inc) },
+        { "◆ TEXT  −",       G_CALLBACK(on_text_size_dec) },
         { NULL,            NULL                         },
-        { "HIDE TREE",     G_CALLBACK(on_tree_toggle)   },
+        { "◆ HIDE TREE",     G_CALLBACK(on_tree_toggle)   },
+        { NULL,            NULL                         },
+        { "◆ README",        G_CALLBACK(on_readme)        },
     };
     for (size_t i = 0; i < G_N_ELEMENTS(menu_items); i++) {
         if (!menu_items[i].label) {
@@ -2728,7 +3329,7 @@ static void build_ui(AppState *app) {
             GtkWidget *it = make_menu_item(
                 menu_items[i].label, menu_items[i].cb, app);
             gtk_menu_shell_append(GTK_MENU_SHELL(app->file_menu), it);
-            if (strcmp(menu_items[i].label, "HIDE TREE") == 0)
+            if (strcmp(menu_items[i].label, "◆ HIDE TREE") == 0)
                 app->tree_toggle_item_widget = it;
         }
     }
@@ -2748,8 +3349,8 @@ static void build_ui(AppState *app) {
         { "▶ SELECTION", G_CALLBACK(on_tts_speak_selection) },
         { "▶ ALL",       G_CALLBACK(on_tts_speak_all)       },
         { "■ STOP",      G_CALLBACK(on_tts_stop)            },
-        { "JOE",         G_CALLBACK(on_tts_voice_joe)       },
-        { "LESSAC",      G_CALLBACK(on_tts_voice_lessac)    },
+        { "◆ JOE",         G_CALLBACK(on_tts_voice_joe)       },
+        { "◆ LESSAC",      G_CALLBACK(on_tts_voice_lessac)    },
     };
     for (size_t i = 0; i < G_N_ELEMENTS(tts_btns); i++) {
         GtkWidget *b = gtk_button_new_with_label(tts_btns[i].lbl);
@@ -2929,7 +3530,9 @@ static void build_ui(AppState *app) {
             GTK_MENU_ITEM(app->tree_toggle_item_widget), "SHOW TREE");
     }
 
-    app_log(app, "▸ Ready.");
+    /* boot sequence fires after GTK main loop starts — deferred so session
+     * restore messages (Loaded: ...) don't interleave with the animation */
+    g_idle_add(boot_sequence_once, app);
 }
 
 /* ── main ───────────────────────────────────────────────────────────────── */
