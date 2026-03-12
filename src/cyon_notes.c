@@ -3143,8 +3143,8 @@ static char *make_bar(int fill, int total) {
 static gboolean boot_step_cb(gpointer data);
 
 static void boot_sequence(AppState *app) {
-    app_log_amber(app, "▸ CYON NOTES // booting...");
-    app_log_amber(app, " ");
+    app_log(app, "▸ CYON NOTES // booting...");
+    app_log(app, " ");
     BootState *bs = g_new(BootState, 1);
     bs->app  = app;
     bs->step = 0;
@@ -3164,7 +3164,7 @@ static gboolean boot_step_cb(gpointer data) {
 
     if (step < N_BOOT_STEPS) {
         char *bar = make_bar(BOOT_STEPS[step].fill, 10);
-        app_log_amber(app, "  %s %s", bar, BOOT_STEPS[step].label);
+        app_log(app, "  %s %s", bar, BOOT_STEPS[step].label);
         g_free(bar);
 
         BootState *next = g_new(BootState, 1);
@@ -3174,11 +3174,11 @@ static gboolean boot_step_cb(gpointer data) {
     } else {
         /* all steps done — print final bar + random quote then STOP */
         char *bar = make_bar(10, 10);
-        app_log_amber(app, "  %s done.", bar);
+        app_log(app, "  %s done.", bar);
         g_free(bar);
-        app_log_amber(app, " ");
+        app_log(app, " ");
         app_log_amber(app, "%s", BOOT_QUOTES[g_random_int_range(0, N_BOOT_QUOTES)]);
-        app_log_amber(app, " ");
+        app_log(app, " ");
         app_log(app, "▸ Ready.");
     }
     return G_SOURCE_REMOVE;
