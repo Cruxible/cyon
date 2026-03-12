@@ -1499,14 +1499,22 @@ static gboolean on_key_press(GtkWidget *w, GdkEventKey *ev, AppState *app) {
         if (slen > 0 && stripped[slen-1] == ':') {
             char first_word[32] = {0};
             sscanf(stripped, "%31s", first_word);
-            /* strip trailing ( from word */
+            /* strip trailing ( and : from word so "else:" matches "else" */
             char *paren = strchr(first_word, '(');
             if (paren) *paren = '\0';
+            char *colon = strchr(first_word, ':');
+            if (colon) *colon = '\0';
             for (int i = 0; triggers[i]; i++) {
                 if (strcmp(first_word, triggers[i]) == 0) {
                     add_indent = TRUE; break;
                 }
             }
+        }
+        /* also indent after an open bracket or brace at end of line */
+        if (!add_indent && slen > 0) {
+            const char *end = stripped + slen - 1;
+            while (end > stripped && *end == ' ') end--;
+            if (*end == '[' || *end == '{') add_indent = TRUE;
         }
         g_free(line_text);
 
