@@ -334,7 +334,7 @@ Exec=$SCRIPT_DIR/bin/main_cyon
 #Icon=$SCRIPT_DIR/bin/cyon.png
 Icon=$SCRIPT_DIR/bin/main_cyon.webp
 Terminal=false
-Categories=Application;
+Categories=TextEditor;Utility;
 EOF
     
     update-desktop-database ~/.local/share/applications
