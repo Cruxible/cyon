@@ -334,11 +334,34 @@ Exec=$SCRIPT_DIR/bin/main_cyon
 #Icon=$SCRIPT_DIR/bin/cyon.png
 Icon=$SCRIPT_DIR/bin/main_cyon.webp
 Terminal=false
-Categories=TextEditor;Utility;
+Categories=Application;
 EOF
     
     update-desktop-database ~/.local/share/applications
     echo -e "${CYAN} Cyon desktop compiled successfully.${NC}"
+}
+compile_cyon_shell() {
+    echo -e "${CYAN} Compiling cyon_shell...${NC}"
+    mkdir -p "$SCRIPT_DIR/bin"
+    gcc -I"$SCRIPT_DIR/include" \
+    "$SCRIPT_DIR/src/main_cyon_shell.c" \
+    "$SCRIPT_DIR/src/downloader.c" \
+    -o "$SCRIPT_DIR/bin/main_cyon_shell" \
+    $(pkg-config --cflags --libs gtk+-3.0) -lpthread || { echo -e "${RED} Failed to compile main_cyon_shell${NC}"; exit 1; }
+    mkdir -p ~/.local/share/applications
+    tee ~/.local/share/applications/cyon_shell.desktop > /dev/null <<EOF
+[Desktop Entry]
+Type=Application
+Encoding=UTF-8
+Name=Cyon Shell
+Comment=Cyon Shell Panel
+Exec=$SCRIPT_DIR/bin/main_cyon_shell
+Icon=$SCRIPT_DIR/bin/main_cyon.webp
+Terminal=false
+Categories=Utility;Accessories;
+EOF
+    update-desktop-database ~/.local/share/applications
+    echo -e "${CYAN} cyon_shell compiled successfully.${NC}"
 }
 setup_pyra_env() {
     echo -e "${CYAN} Setting up pyra_env...${NC}"
@@ -447,6 +470,15 @@ compile_pyra_termux() {
     chmod +x ~/cyon/pyra_tool/pyra_termux
     echo -e "${CYAN} pyra_termux compiled successfully.${NC}"
 }
+remove_cyon_shell() {
+    echo -e "${RED} Removing cyon_shell...${NC}"
+    rm -f ~/.local/share/applications/cyon_shell.desktop
+    rm -f "$SCRIPT_DIR/bin/main_cyon_shell"
+    if command -v update-desktop-database &>/dev/null; then
+        update-desktop-database ~/.local/share/applications
+    fi
+    echo -e "${CYAN} cyon_shell removed.${NC}"
+}
 uninstall_cyon() {
     echo -e "${RED} ==============================${NC}"
     echo -e "${RED}    Cyon Uninstaller${NC}"
@@ -461,6 +493,7 @@ uninstall_cyon() {
             echo -e "${RED} Removing desktop entry...${NC}"
             rm -f ~/.local/share/applications/cyon.desktop
             rm -f ~/.local/share/applications/cyon_notes.desktop
+            rm -f ~/.local/share/applications/cyon_shell.desktop
             if command -v update-desktop-database &>/dev/null; then
                 update-desktop-database ~/.local/share/applications
             fi
@@ -494,9 +527,11 @@ while true; do
     echo -e "${CYAN} 8) Setup Piper voices only${NC}"
     echo -e "${RED} 9) Remove Pyra PATH from ~/.bashrc${NC}"
     echo -e "${RED} 10) Uninstall Cyon${NC}"
+    echo -e "${CYAN} 11) Compile cyon_shell${NC}"
+    echo -e "${RED} 12) Remove cyon_shell${NC}"
     echo -e "${RED} 0) Exit${NC}"
     echo -e "${CYAN} ==============================${NC}"
-    read -p $' \033[0;36mSelect an option [0-10]: \033[0m' choice
+    read -p $' \033[0;36mSelect an option [0-12]: \033[0m' choice
     case $choice in
         1)
             install_desktop_dependencies
@@ -520,6 +555,8 @@ while true; do
         8) install_piper_binary ; setup_piper_models ;;
         9) remove_path_from_bashrc ;;
         10) uninstall_cyon ;;
+        11) install_desktop_dependencies ; compile_cyon_shell ;;
+        12) remove_cyon_shell ;;
         0)
             echo -e "${RED} Exiting. Later!${NC}"
             exit 0
