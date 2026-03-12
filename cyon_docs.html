@@ -453,20 +453,20 @@ footer {
   <div class="page-header">
     <div class="eyebrow">// DOCUMENTATION</div>
     <h1>▸ <span>C</span>YON</h1>
-    <p class="tagline">Hybrid GTK + CLI desktop tool — C / Python / Ollama / Discord</p>
+    <p class="tagline">Hybrid GTK + CLI desktop tool — C / Python / Ollama / Discord / stubbornness</p>
     <div class="badge">⚠ ACTIVE DEVELOPMENT</div>
   </div>
 
   <!-- WHAT IS CYON -->
   <section id="what-is-cyon">
     <h2>What is Cyon</h2>
-    <p>Cyon is a lightweight, hacker-themed desktop control panel built in C with GTK 3. It runs a persistent GTK window that manages background processes, provides a command input, and launches a suite of Python utility tools. It is designed to be fast, modular, and extendable — living entirely inside <code>~/cyon/</code>.</p>
+    <p>Cyon is a lightweight, hacker-themed desktop control panel built in C with GTK 3. It runs a persistent GTK window that manages background processes, provides a command input, and launches a suite of Python utility tools. It is designed to be fast, modular, and extendable — living entirely inside <code>~/cyon/</code>. No cloud. No Electron. No regrets. (Maybe one.)</p>
 
-    <p>At its core, Cyon is a <strong>process manager</strong>: it spawns and controls three key services from a single UI — the Ollama LLM server, the local AI chatbot, and a Discord bot — all wired to a shared log view and input field.</p>
+    <p>At its core, Cyon is a <strong>process manager</strong>: it spawns and controls three key services from a single UI — the Ollama LLM server, the local AI chatbot, and a Discord bot — all wired to a shared log view and input field. your local AI, your Discord bot, your rules.</p>
 
     <div class="info">
       <strong>// DESIGN PHILOSOPHY</strong>
-      No bloat. No Electron. Compiled C binary with GTK for the window, Python for scriptable tools, Ollama for local AI. Everything runs on your machine.
+      No bloat. No Electron. No subscription. Compiled C binary with GTK for the window, Python for scriptable tools, Ollama for local AI. Everything runs on your machine. no data leaves. no snitching occurs.
     </div>
   </section>
 
@@ -488,7 +488,7 @@ footer {
 <span class="box">cyon_netscan</span> <span class="arr">─────</span> <span style="color:var(--text-dim)">network scanner</span>
     </div>
 
-    <p>All Python processes run inside <code>~/pyra_env</code> — a dedicated virtual environment with system-site-packages enabled so GTK bindings (which can't be pip-installed) are available alongside pip packages.</p>
+    <p>All Python processes run inside <code>~/pyra_env</code> — a dedicated virtual environment with system-site-packages enabled so GTK bindings (which can't be pip-installed) are available alongside pip packages. pip tried to install them once. we don't talk about what happened.</p>
   </section>
 
   <!-- HOW IT WORKS -->
@@ -544,13 +544,13 @@ footer {
   </section>
 
   <div class="marquee-strip">
-    <span class="marquee-inner">▸ CYON ONLINE. REALITY OPTIONAL. &nbsp;&nbsp;&nbsp; ▸ OLLAMA STANDING BY. &nbsp;&nbsp;&nbsp; ▸ ROUTING THROUGH THE SHADOW REALM... &nbsp;&nbsp;&nbsp; ▸ ALL SYSTEMS... PROBABLY FINE. &nbsp;&nbsp;&nbsp; ▸ THE HORRORS PERSIST, BUT SO DO I. &nbsp;&nbsp;&nbsp; ▸ BYTES GO BRRR... &nbsp;&nbsp;&nbsp; ▸ LOCAL AI. NO CLOUD. NO SNITCHING. &nbsp;&nbsp;&nbsp;</span>
+    <span class="marquee-inner">▸ CYON ONLINE. REALITY OPTIONAL. &nbsp;&nbsp;&nbsp; ▸ OLLAMA STANDING BY. &nbsp;&nbsp;&nbsp; ▸ ROUTING THROUGH THE SHADOW REALM... &nbsp;&nbsp;&nbsp; ▸ ALL SYSTEMS... PROBABLY FINE. &nbsp;&nbsp;&nbsp; ▸ THE HORRORS PERSIST, BUT SO DO I. &nbsp;&nbsp;&nbsp; ▸ BYTES GO BRRR... &nbsp;&nbsp;&nbsp; ▸ LOCAL AI. NO CLOUD. NO SNITCHING. &nbsp;&nbsp;&nbsp; ▸ NO ELECTRON. YOU'RE WELCOME. &nbsp;&nbsp;&nbsp; ▸ GTK3: BECAUSE GTK4 IS SOMEONE ELSE'S PROBLEM. &nbsp;&nbsp;&nbsp; ▸ SYNTAX HIGHLIGHTING: OFF BY DEFAULT. YOU KNOW WHY. &nbsp;&nbsp;&nbsp; ▸ PYRA IS UNDERNEATH. DO NOT GO THERE. &nbsp;&nbsp;&nbsp; ▸ 5 YEARS IN THE MAKING. 0 REGRETS. MAYBE 1. &nbsp;&nbsp;&nbsp; ▸ WORKS ON MY MACHINE. &nbsp;&nbsp;&nbsp;</span>
   </div>
 
   <!-- CONFIG -->
   <section id="config">
     <h2>cyon_config.ini</h2>
-    <p>Cyon stores user configuration in <code>~/cyon/cyon_config.ini</code>. This file is created automatically on first run with placeholder values. Open it in any text editor and fill in your details.</p>
+    <p>Cyon stores user configuration in <code>~/cyon/cyon_config.ini</code>. Created automatically on first run. Open it in any text editor — including cyon_notes, if you're living the bit — and fill in your details.</p>
 
     <div class="code-block"><button class="copy-btn" onclick="cp(this)">COPY</button><span class="c"># ~/cyon/cyon_config.ini</span>
 
@@ -568,7 +568,7 @@ footer {
 
     <div class="warn">
       <strong>// NEVER SHARE THIS FILE</strong>
-      Your Discord token is a password. <code>cyon_config.ini</code> is in <code>.gitignore</code> and must never be committed to GitHub. If your token is ever exposed, regenerate it immediately at discord.com/developers.
+      Your Discord token is a password. <code>cyon_config.ini</code> is in <code>.gitignore</code> and must never be committed to GitHub. if you leak it, that's a you problem. Discord will tell you. Loudly. regenerate it immediately at discord.com/developers.
     </div>
 
     <div class="info">
@@ -595,7 +595,7 @@ footer {
       <tr><td>ffmpeg</td><td>Audio/video processing — used by editor tools and yt-dlp; plays the intro sound via <code>ffplay</code></td></tr>
     </table>
 
-    <h3>Python / GTK bindings</h3>
+    <h3>Python / GTK bindings (apt only — pip cannot help you here)</h3>
     <div class="code-block"><button class="copy-btn" onclick="cp(this)">COPY</button><span class="c"># Must be apt-installed — pip cannot provide these</span>
 <span class="g">sudo apt install -y</span> <span class="am">python3-gi python3-gi-cairo gir1.2-gtk-3.0</span></div>
 
@@ -606,7 +606,7 @@ footer {
       <tr><td>gir1.2-gtk-3.0</td><td>GObject introspection data for GTK 3 — needed by PyGObject at runtime</td></tr>
     </table>
 
-    <h3>pyra_env pip packages</h3>
+    <h3>pyra_env pip packages (installed automatically — you're welcome)</h3>
     <div class="code-block"><button class="copy-btn" onclick="cp(this)">COPY</button><span class="c"># Installed automatically by compile_cyon option 2</span>
 <span class="g">pip3 install</span> <span class="am">pyfiglet moviepy rich pillow cryptography pyautogui</span></div>
 
@@ -646,20 +646,20 @@ footer {
   <section id="building">
     <h2>Building</h2>
 
-    <p>All build steps are handled by <code>compile_cyon</code>. Make it executable and run it:</p>
+    <p>All build steps are handled by <code>compile_cyon</code>. it does the heavy lifting so you don't have to:</p>
 
     <div class="code-block"><button class="copy-btn" onclick="cp(this)">COPY</button><span class="g">chmod +x</span> ~/cyon/compile_cyon
 <span class="g">cd</span> ~/cyon
 <span class="g">./compile_cyon</span></div>
 
-    <p>For a fresh full install, choose option <strong>5 — Compile all</strong>. This runs all steps in sequence:</p>
+    <p>For a fresh full install, choose option <strong>5 — Compile all</strong>. This runs all steps in sequence. go make coffee:</p>
 
     <div class="process-map">
       <div class="proc-step"><span class="proc-num">①</span><div class="proc-body"><div class="proc-title">Install apt dependencies</div><div class="proc-desc">build-essential, libgtk-3-dev, pkg-config, curl, yt-dlp, ffmpeg, python3-gi, python3-gi-cairo, gir1.2-gtk-3.0</div></div></div>
       <div class="proc-step"><span class="proc-num">②</span><div class="proc-body"><div class="proc-title">Compile C binaries → bin/</div><div class="proc-desc">main_cyon (GTK app), cyon_cli (standalone shell), watcher (fs monitor), cyon_netscan (network scanner)</div></div></div>
       <div class="proc-step"><span class="proc-num">③</span><div class="proc-body"><div class="proc-title">Create ~/pyra_env + install pip packages + Piper TTS</div><div class="proc-desc">Python venv with --system-site-packages. Installs pyfiglet, moviepy, rich, pillow, cryptography, pyautogui, piper-tts, onnxruntime, pathvalidate using the venv's own pip.</div></div></div>
       <div class="proc-step"><span class="proc-num">④</span><div class="proc-body"><div class="proc-title">Download Piper voice models → ~/cyon/piper_models/</div><div class="proc-desc">Downloads en_US-joe-medium and en_US-lessac-medium (.onnx + .onnx.json) from Hugging Face.</div></div></div>
-      <div class="proc-step"><span class="proc-num">⑤</span><div class="proc-body"><div class="proc-title">Compile pyra_toolz (Linux binary)</div><div class="proc-desc">Uses PyInstaller in a temp venv — output goes to ~/cyon/pyra_tool/pyra_toolz</div></div></div>
+      <div class="proc-step"><span class="proc-num">⑤</span><div class="proc-body"><div class="proc-title">Compile pyra_toolz (Linux binary — PyInstaller doing its thing)</div><div class="proc-desc">Uses PyInstaller in a temp venv — output goes to ~/cyon/pyra_tool/pyra_toolz</div></div></div>
       <div class="proc-step"><span class="proc-num">⑥</span><div class="proc-body"><div class="proc-title">Install .desktop launcher</div><div class="proc-desc">Creates ~/.local/share/applications/cyon.desktop so Cyon appears in your app menu</div></div></div>
     </div>
 
@@ -681,12 +681,12 @@ footer {
   <section id="ollama-setup">
     <h2>Ollama + Llama 3 Setup</h2>
 
-    <p>Cyon uses Ollama to run Llama 3 locally — no API key, no cloud, no data leaving your machine. The GTK control panel manages the <code>ollama serve</code> process directly.</p>
+    <p>Cyon uses Ollama to run Llama 3 locally — no API key, no cloud, no data leaving your machine. your AI lives on your hardware and answers to you. the GTK control panel manages the <code>ollama serve</code> process directly.</p>
 
     <div class="code-block"><button class="copy-btn" onclick="cp(this)">COPY</button><span class="c"># 1. Install Ollama</span>
 <span class="g">curl -fsSL</span> https://ollama.com/install.sh <span class="g">|</span> sh
 
-<span class="c"># 2. Pull Llama 3 (8B default — ~4.7GB)</span>
+<span class="c"># 2. Pull Llama 3 (8B default — ~4.7GB — go make a sandwich)</span>
 <span class="g">ollama pull</span> <span class="am">llama3</span>
 
 <span class="c"># 3. Or pull the smaller 8B instruct variant</span>
@@ -706,7 +706,7 @@ footer {
   <section id="modelfile">
     <h2>Modelfile — Custom Cyon Persona</h2>
 
-    <p>Create a custom Ollama model with Cyon's personality baked in using a Modelfile. Place this in <code>~/cyon/</code>:</p>
+    <p>Create a custom Ollama model with Cyon's personality baked in using a Modelfile. give your local AI some character. it's running on your machine anyway. Place this in <code>~/cyon/</code>:</p>
 
     <div class="code-block"><button class="copy-btn" onclick="cp(this)">COPY</button><span class="c"># ~/cyon/Modelfile</span>
 <span class="cy">FROM</span> <span class="am">llama3</span>
@@ -737,7 +737,7 @@ You are running inside the Cyon desktop application on the user's machine.
 
     <div class="amber-box">
       <strong>// NOTE</strong>
-      Re-run <code>ollama create cyon -f ./Modelfile</code> any time you update the Modelfile. The old model is replaced automatically.
+      Re-run <code>ollama create cyon -f ./Modelfile</code> any time you update the Modelfile. The old model is replaced automatically. llama3 is just llama3. cyon is <em>cyon</em>.
     </div>
   </section>
 
@@ -762,7 +762,7 @@ You are running inside the Cyon desktop application on the user's machine.
 
     <div class="info">
       <strong>// PATH SHORTCUT</strong>
-      Run option 6 in <code>compile_cyon</code> to add <code>~/cyon/bin</code> and <code>~/cyon/pyra_tool</code> to your PATH in <code>~/.bashrc</code>. After that, just type <code>main_cyon</code> or <code>cyon_cli</code> from anywhere.
+      Run option 6 in <code>compile_cyon</code> to add <code>~/cyon/bin</code> and <code>~/cyon/pyra_tool</code> to your PATH in <code>~/.bashrc</code>. After that, just type <code>main_cyon</code> or <code>cyon_cli</code> from anywhere. like they were meant to.
     </div>
   </section>
 
@@ -773,7 +773,7 @@ You are running inside the Cyon desktop application on the user's machine.
       <tr><th>Menu Path</th><th>What It Does</th></tr>
       <tr><td>Pyra Player</td><td>Launches <code>pyra_player.py</code> — GTK media player</td></tr>
       <tr><td>Downloader</td><td>GTK download dialog — MP3, MP4, or general file via yt-dlp/curl</td></tr>
-      <tr><td>Cyon CLI</td><td>Opens <code>bin/cyon_cli</code> in a terminal (tries mate-terminal, gnome-terminal, xterm, etc.)</td></tr>
+      <tr><td>Cyon CLI</td><td>Opens <code>bin/cyon_cli</code> in a terminal (tries mate-terminal, gnome-terminal, xterm, etc. — it will find one)</td></tr>
       <tr><td>Pyra CLI</td><td>Launches <code>pyra_toolz</code> in a terminal window</td></tr>
       <tr><td>Tools → Editor Tools → Cut Video</td><td>Trim a video to start/end time → MP4</td></tr>
       <tr><td>Tools → Editor Tools → Extract Audio</td><td>Pull audio track from video → MP3</td></tr>
@@ -787,7 +787,7 @@ You are running inside the Cyon desktop application on the user's machine.
       <tr><td>Tools → Pyra Notes/TTS</td><td>GTK notes editor + Piper TTS — FILE dropdown (New, Load, Save, Delete, Text&nbsp;+/−), opens .txt/.py/.c/.sh and extensionless files, syntax highlighting, adjustable text size, JOE&nbsp;♂ / LESSAC&nbsp;♀ voice toggle</td></tr>
       <tr><td>Security → Defense → Watcher</td><td>Toggle filesystem watcher (toggle: kills if running)</td></tr>
       <tr><td>Security → Defense → Firewall</td><td>Firewall controls</td></tr>
-      <tr><td>Security → Offense → Port Scanner</td><td>Network port scanner</td></tr>
+      <tr><td>Security → Offense → Port Scanner</td><td>Network port scanner — for educational purposes, obviously</td></tr>
       <tr><td>Security → Offense → DNS Lookup</td><td>DNS resolution tool</td></tr>
     </table>
   </section>
@@ -813,7 +813,7 @@ You are running inside the Cyon desktop application on the user's machine.
   <!-- PYRA LIB -->
   <section id="pyra-lib">
     <h2>pyra_lib Tools</h2>
-    <p>Lives at <code>~/cyon/pyra_lib/</code>. Called from the Pyra launcher. All run inside <code>~/pyra_env</code>.</p>
+    <p>Lives at <code>~/cyon/pyra_lib/</code>. Called from the Pyra launcher. All run inside <code>~/pyra_env</code>. this is the good part of pyra. pyra also has a bad part. you'll know it when you see it.</p>
     <table>
       <tr><th>Script</th><th>Description</th></tr>
       <tr><td>pyra_shared.py</td><td>Shared utilities, input helpers, and logos used across pyra_lib</td></tr>
@@ -833,7 +833,7 @@ You are running inside the Cyon desktop application on the user's machine.
       <tr><td>shift_image.py</td><td>Image shifting and manipulation</td></tr>
       <tr><td>conversions.py</td><td>General unit and data conversions</td></tr>
       <tr><td>gtk_convert.py</td><td>GTK-based conversion interface</td></tr>
-      <tr><td>pyra_repeater.py</td><td>Auto-messenger via pyautogui — use carefully</td></tr>
+      <tr><td>pyra_repeater.py</td><td>Auto-messenger via pyautogui — use carefully. we mean it.</td></tr>
     </table>
   </section>
 
@@ -866,20 +866,24 @@ You are running inside the Cyon desktop application on the user's machine.
   <!-- CYON NOTES -->
   <section id="pyra-notes">
     <h2>cyon_notes — Standalone Notes Editor</h2>
-    <p>A standalone GTK3 notes editor written in C. Compiled to <code>bin/cyon_notes</code> and run independently of the main Cyon desktop. Config and session state live in <code>cyon_notes.conf</code> next to the binary.</p>
+    <p>A standalone GTK3 notes editor written in C. Compiled to <code>bin/cyon_notes</code> and run independently of the main Cyon desktop. replaced Sublime Text. Sublime doesn't know yet. Config and session state live in <code>~/cyon/src/cyon_notes.conf</code>.</p>
 
     <h3>Features</h3>
     <table>
       <tr><th>Feature</th><th>Details</th></tr>
-      <tr><td>Multi-tab editing</td><td>Open multiple files at once. Tabs show <code>*</code> when unsaved.</td></tr>
-      <tr><td>File tree panel</td><td>Browse and open files from a folder. Live file monitor refreshes on changes.</td></tr>
+      <tr><td>Multi-tab editing</td><td>Open multiple files at once. Tabs show ● when unsaved. Ctrl+T new tab, Ctrl+W close.</td></tr>
+      <tr><td>File tree panel</td><td>Browse and open files from a folder. Live file monitor refreshes on changes. Toggle with HIDE/SHOW TREE.</td></tr>
       <tr><td>Session restore</td><td>Saves open files, active tab, window size, pane position, and font size on exit. Restores everything on next launch.</td></tr>
-      <tr><td>Syntax highlighting</td><td>14 keyword color groups + string / comment / operator rules, all defined in <code>cyon_notes.conf</code>. Reload with FILE → RELOAD CONF.</td></tr>
+      <tr><td>Syntax highlighting</td><td>Incremental dirty-line system — only changed lines are rescanned, keeping typing smooth at any file size. Toggle with HL ON/OFF button (defaults OFF — the button says OFF because it IS off. click it. you'll understand.). All rules defined in <code>cyon_notes.conf</code>. Reload live with FILE → RELOAD CONF.</td></tr>
       <tr><td>Smart indent</td><td>Enter after <code>if / def / class / for / while / {</code> auto-indents the next line.</td></tr>
-      <tr><td>Auto-close pairs</td><td><code>( [ { ' "</code> close automatically. Backspace removes the pair.</td></tr>
+      <tr><td>Auto-close pairs</td><td><code>( [ { ' "</code> close automatically. Backspace removes the pair. if you hate this: Ctrl+Z immediately. it leaves.</td></tr>
+      <tr><td>Comment toggle</td><td>Ctrl+/ toggles <code>#</code> comments on selected lines.</td></tr>
+      <tr><td>Duplicate line</td><td>Ctrl+D duplicates the current line.</td></tr>
+      <tr><td>Indent / dedent</td><td>Tab / Shift+Tab indents or dedents selected lines.</td></tr>
       <tr><td>TTS</td><td>Speak selected text or full file via Piper (joe / lessac). Paths set in conf.</td></tr>
-      <tr><td>Font size</td><td>FILE → TEXT + / TEXT − adjusts editor size 8–36 px. Saved on exit.</td></tr>
-      <tr><td>Single-instance lock</td><td>Only one <code>cyon_notes</code> runs at a time.</td></tr>
+      <tr><td>RAM graph</td><td>Live scrolling Cairo line graph (bottom-right) showing cyon_notes' own memory usage. Updates every second. purely for vibes. important vibes. Colors configurable via <code>[ram_graph]</code> in conf.</td></tr>
+      <tr><td>Font size</td><td>FILE → TEXT + / TEXT − or Ctrl+scroll adjusts editor size 8–36 px. Saved on exit.</td></tr>
+      <tr><td>Single-instance lock</td><td>Only one <code>cyon_notes</code> runs at a time. one is enough. you only need one.</td></tr>
     </table>
 
     <h3>FILE Menu</h3>
@@ -896,7 +900,7 @@ You are running inside the Cyon desktop application on the user's machine.
     </table>
 
     <h3>cyon_notes.conf</h3>
-    <p>Created automatically next to the binary on first run. All values are saved on exit — you only need to edit the <code>[tts]</code> paths once to match your Piper install.</p>
+    <p>Created automatically on first run at <code>~/cyon/src/cyon_notes.conf</code>. All values are saved on exit — you only need to edit the <code>[tts]</code> paths once. then you never think about them again. that's the goal.</p>
 
     <div class="code-block"><button class="copy-btn" onclick="cp(this)">COPY</button><span class="c"># Session — auto-saved on exit</span>
 <span class="cy">[session]</span>
@@ -929,7 +933,13 @@ You are running inside the Cyon desktop application on the user's machine.
 <span class="am">color_lime</span>    = #c8ff00
 <span class="am">color_coral</span>   = #ff9966
 <span class="am">color_comment</span> = #6a5acd
-...</div>
+
+<span class="c"># RAM graph colors (optional — defaults shown)</span>
+<span class="cy">[ram_graph]</span>
+<span class="am">color_line</span> = #E8A020
+<span class="am">color_glow</span> = #E8A020
+<span class="am">color_grid</span> = #00994D
+<span class="am">color_text</span> = #00FF99</div>
 
     <h3>Syntax Highlighting</h3>
     <p>All groups are defined in <code>cyon_notes.conf</code>. Add a new <code>[highlight_group_N]</code> section with <code>keywords</code> and <code>color</code> — no code changes needed. Use FILE → RELOAD CONF to apply changes live.</p>
@@ -953,13 +963,13 @@ You are running inside the Cyon desktop application on the user's machine.
     </table>
 
     <h3>TTS</h3>
-    <p>Select text and click <strong>[SELECTION]</strong>, or click <strong>[ALL]</strong> to speak the full file. Toggle between <strong>JOE ♂</strong> and <strong>LESSAC ♀</strong> voices. Click <strong>[STOP]</strong> to silence. All paths are set in <code>cyon_notes.conf</code> under <code>[tts]</code> — run <code>compile_cyon</code> option 2 to install Piper automatically.</p>
+    <p>Select text and click <strong>[SELECTION]</strong>, or click <strong>[ALL]</strong> to speak the full file. Toggle between <strong>JOE ♂</strong> and <strong>LESSAC ♀</strong> voices. Click <strong>[STOP]</strong> to silence. All paths set in <code>cyon_notes.conf</code> under <code>[tts]</code>. without Piper, the TTS buttons sit there looking pretty. they're fine with it. run <code>compile_cyon</code> option 2 to install Piper automatically.</p>
 
     <div class="info">
       <strong>// BUILDING cyon_notes</strong>
       Use <code>compile_cyon</code> option 10, or manually:<br>
       <code>gcc $(pkg-config --cflags gtk+-3.0) -o bin/cyon_notes src/cyon_notes.c $(pkg-config --libs gtk+-3.0) -lpthread</code><br>
-      Copy <code>cyon_notes.conf</code> to the same directory as the binary.
+      <code>cyon_notes.conf</code> lives at <code>~/cyon/src/cyon_notes.conf</code> — created automatically on first run.
     </div>
   </section>
 
@@ -978,7 +988,7 @@ You are running inside the Cyon desktop application on the user's machine.
       <tr><td>8</td><td>Remove Pyra PATH block from ~/.bashrc</td></tr>
       <tr><td>9</td><td>Uninstall Cyon (see below)</td></tr>
       <tr><td>10</td><td>Compile <code>cyon_notes</code> standalone notes editor — outputs to <code>bin/cyon_notes</code>, copies <code>cyon_notes.conf</code> alongside it</td></tr>
-      <tr><td>0</td><td>Exit</td></tr>
+      <tr><td>0</td><td>Exit (skill issue)</td></tr>
     </table>
   </section>
 
@@ -988,7 +998,7 @@ You are running inside the Cyon desktop application on the user's machine.
   <section id="uninstall">
     <h2>Uninstall</h2>
 
-    <p>Select option <strong>9</strong> in <code>compile_cyon</code>. You will be asked to confirm. The uninstaller removes:</p>
+    <p>Select option <strong>9</strong> in <code>compile_cyon</code>. You will be asked to confirm. think about what you're doing. The uninstaller removes:</p>
     <table>
       <tr><th>What</th><th>Path</th></tr>
       <tr><td>Desktop launcher</td><td>~/.local/share/applications/cyon.desktop</td></tr>
@@ -999,17 +1009,18 @@ You are running inside the Cyon desktop application on the user's machine.
 
     <div class="warn">
       <strong>// WARNING — CANNOT BE UNDONE</strong>
-      The uninstaller deletes the entire ~/cyon/ directory. Back up any scripts or configs you want to keep before running it.
+      The uninstaller deletes the entire ~/cyon/ directory. 5 years of work, gone in a <code>rm -rf</code>. the uninstaller will ask you once. it means it. back up anything you want to keep.
     </div>
 
-    <p>apt packages (build-essential, libgtk-3-dev, yt-dlp, etc.) are <strong>not</strong> removed automatically as they may be used by other software. Remove manually if needed:</p>
+    <p>apt packages (build-essential, libgtk-3-dev, yt-dlp, etc.) are <strong>not</strong> removed automatically — they may be used by other software. remove manually if needed, but don't blame us if something else breaks:</p>
 
     <div class="code-block"><button class="copy-btn" onclick="cp(this)">COPY</button><span class="g">sudo apt remove</span> <span class="am">build-essential libgtk-3-dev pkg-config yt-dlp ffmpeg</span></div>
   </section>
 
   <footer>
-    <p>▸ CYON &nbsp;|&nbsp; Author: Ioannes Cruxibulum &nbsp;|&nbsp; Linux-focused &nbsp;|&nbsp; Active development</p>
-    <p style="margin-top:6px; color:var(--text-dim)">Place this file in ~/cyon/ and open with any browser.</p>
+    <p>▸ CYON &nbsp;|&nbsp; Author: Ioannes Cruxibulum &nbsp;|&nbsp; Linux-focused &nbsp;|&nbsp; Active development &nbsp;|&nbsp; est. 2023 &nbsp;|&nbsp; still compiling</p>
+    <p style="margin-top:6px; color:var(--text-dim)">built with GTK3, C, Python, and pure stubbornness. place this file in ~/cyon/ and open with any browser.</p>
+    <p style="margin-top:4px; color:var(--text-dim)">this software is provided as-is. if it breaks something, you probably deserved it. if it doesn't break anything, you're welcome.</p>
   </footer>
 
 </main>
