@@ -2218,10 +2218,18 @@ static void tts_run(AppState *app, const char *text) {
     }
 
     /* piper executable and voice model from config */
+    /* build runtime fallbacks from $HOME so no path is hardcoded */
+    char _piper_fallback[PATH_MAX], _models_fallback[PATH_MAX];
+    const char *_home = g_get_home_dir();
+    g_snprintf(_piper_fallback,  sizeof(_piper_fallback),
+               "%s/pyra_env/bin/piper", _home);
+    g_snprintf(_models_fallback, sizeof(_models_fallback),
+               "%s/cyon/piper_models",  _home);
+
     const char *piper_path = app->tts_piper_path
-        ? app->tts_piper_path : "/home/cruxible/pyra_env/bin/piper";
+        ? app->tts_piper_path : _piper_fallback;
     const char *model_dir  = app->tts_model_dir
-        ? app->tts_model_dir  : "/home/cruxible/cyon/piper_models";
+        ? app->tts_model_dir  : _models_fallback;
     const char *model_file = app->tts_voice_joe
         ? (app->tts_model_joe    ? app->tts_model_joe    : "en_US-joe-medium.onnx")
         : (app->tts_model_lessac ? app->tts_model_lessac : "en_US-lessac-medium.onnx");
@@ -2417,11 +2425,16 @@ static void app_load_config(AppState *app) {
     app->_cfg_win_h = (win_h > 200) ? win_h : 660;
 
     /* ── [tts] ── */
+    const char *_home_cfg = g_get_home_dir();
+    char _piper_def[PATH_MAX], _models_def[PATH_MAX];
+    g_snprintf(_piper_def,  sizeof(_piper_def),  "%s/pyra_env/bin/piper",  _home_cfg);
+    g_snprintf(_models_def, sizeof(_models_def), "%s/cyon/piper_models",   _home_cfg);
+
     char *pp = g_key_file_get_string(kf, "tts", "piper_path", NULL);
-    app->tts_piper_path = (pp && pp[0]) ? pp : g_strdup("/home/cruxible/pyra_env/bin/piper");
+    app->tts_piper_path = (pp && pp[0]) ? pp : g_strdup(_piper_def);
 
     char *md = g_key_file_get_string(kf, "tts", "model_dir", NULL);
-    app->tts_model_dir = (md && md[0]) ? md : g_strdup("/home/cruxible/cyon/piper_models");
+    app->tts_model_dir = (md && md[0]) ? md : g_strdup(_models_def);
 
     char *mj = g_key_file_get_string(kf, "tts", "voice_joe_model", NULL);
     app->tts_model_joe = (mj && mj[0]) ? mj : g_strdup("en_US-joe-medium.onnx");
