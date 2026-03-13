@@ -2234,7 +2234,7 @@ static void tts_run(AppState *app, const char *text) {
         ? (app->tts_model_joe    ? app->tts_model_joe    : "en_US-joe-medium.onnx")
         : (app->tts_model_lessac ? app->tts_model_lessac : "en_US-lessac-medium.onnx");
 
-    char voice_model[PATH_MAX];
+    char voice_model[PATH_MAX * 2];
     snprintf(voice_model, sizeof(voice_model), "%s/%s", model_dir, model_file);
 
     /* escape the text for shell */
