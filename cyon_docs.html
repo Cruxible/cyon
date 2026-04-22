@@ -430,7 +430,6 @@ footer {
 
   <span class="nav-section">DESKTOP</span>
   <a href="#cyon-wm">cyon_wm</a>
-  <a href="#cyon-tty">cyon_tty</a>
   <a href="#cyon-neo">cyon_neo</a>
   <a href="#cyon-files">cyon_files</a>
   <a href="#cyon-pixelart">cyon_pixelart</a>
@@ -468,7 +467,7 @@ footer {
 <main>
 
   <div class="page-header">
-    <div class="eyebrow">// DOCUMENTATION — v5.9</div>
+    <div class="eyebrow">// DOCUMENTATION — v5.8</div>
     <h1>▸ <span>C</span>YON</h1>
     <p class="tagline">Desktop environment · Tool suite · Minecraft server platform · Scripting engine</p>
     <div class="badge">⚠ ACTIVE DEVELOPMENT</div>
@@ -509,8 +508,6 @@ footer {
 <span class="box">cyon_wm</span> <span class="arr">──── X11 window manager ────</span> <span class="box cyan">3 themes · 4 workspaces · menus · marquee</span>
     │
     ├─ <span class="box">cyon_neo</span>     <span class="arr">VTE terminal + NEO panel + CMD panel</span>
-    ├─ <span class="box">cyon_tty</span>     <span class="arr">native Cyon terminal — no external deps</span>
-    ├─ <span class="box">main_cyon_shell</span><span class="arr"> native Cyon shell</span>
     ├─ <span class="box">cyon_files</span>   <span class="arr">dual-pane file manager</span>
     ├─ <span class="box">cyon_pixelart</span><span class="arr"> pixel art editor + animator</span>
     ├─ <span class="box">cyon_notes</span>   <span class="arr">notes editor + Piper TTS</span>
@@ -647,14 +644,6 @@ gcc $(pkg-config --cflags gtk+-3.0 vte-2.91) src/cyon_neo.c \
     $(pkg-config --libs gtk+-3.0 vte-2.91) -lm -lutil -o bin/cyon_neo
 
 <span class="c"># Or: compile_cyon option 6</span></div>
-  </section>
-
-  <section id="cyon-tty">
-    <h2>cyon_tty — Native Terminal</h2>
-    <p><code>bin/cyon_tty</code> — Cyon's own terminal emulator. No external terminal dependencies. Ships as a compiled binary alongside cyon_neo for situations where a lightweight, self-contained terminal is preferred.</p>
-    <p>Launched from <strong>[ PROGRAMS ]</strong> in the cyon_wm menu or directly from the command line.</p>
-    <div class="code-block">./compile_cyon  # option 4</div>
-    <div class="amber-box"><strong>// NOTE</strong> cyon_neo remains the primary terminal (VTE + NEO panel + CMD panel). cyon_tty is the stripped-down standalone option.</div>
   </section>
 
   <section id="cyon-files">
@@ -1087,7 +1076,7 @@ sudo apt install -y python3-gi python3-gi-cairo gir1.2-gtk-3.0 python3-venv node
       <tr><td>1</td><td>Install all apt deps + compile everything + setup pyra_env</td></tr>
       <tr><td>2</td><td>cyon_wm + cyon_sc + cyon_launch + cyon_files <span class="desc">(also installs cyan GTK theme)</span></td></tr>
       <tr><td>3</td><td>cyon desktop apps (main_cyon, notes, neo, 3d, pixelart)</td></tr>
-      <tr><td>4</td><td>cyon_shell / cyon_tty / main_cyon_shell</td></tr>
+      <tr><td>4</td><td>cyon_shell</td></tr>
       <tr><td>5</td><td>cyon_notes</td></tr>
       <tr><td>6</td><td>cyon_neo</td></tr>
       <tr><td>7</td><td>cyon_pixelart</td></tr>
@@ -1124,7 +1113,7 @@ sudo apt remove build-essential libgtk-3-dev libvte-2.91-dev pkg-config yt-dlp f
   </section>
 
   <footer>
-    // CYON v5.9 — no cloud · no Electron · no regrets (maybe one) · built in C · themed in cyan · CyonScript inside
+    // CYON v5.8 — no cloud · no Electron · no regrets (maybe one) · built in C · themed in cyan · CyonScript inside
   </footer>
 
 </main>
