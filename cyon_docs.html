@@ -1,0 +1,1153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cyon — Documentation</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&display=swap');
+
+:root {
+  --green:    #00ff99;
+  --green-dim:#00cc77;
+  --cyan:     #00e5ff;
+  --amber:    #E8A020;
+  --red:      #ff3355;
+  --bg:       #0a0a0f;
+  --bg2:      #0d0d15;
+  --bg3:      #05050a;
+  --border:   #1a2a20;
+  --border-c: rgba(0,255,153,0.2);
+  --text:     #b0d8c0;
+  --text-dim: #4a7a5a;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 14px;
+  line-height: 1.7;
+  min-height: 100vh;
+}
+
+/* Scanlines */
+body::before {
+  content:'';
+  position:fixed; inset:0;
+  background: repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,0,0,0.06) 3px, rgba(0,0,0,0.06) 4px);
+  pointer-events:none; z-index:999;
+}
+
+/* Grid */
+body::after {
+  content:'';
+  position:fixed; inset:0;
+  background-image:
+    linear-gradient(rgba(0,255,153,0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,255,153,0.025) 1px, transparent 1px);
+  background-size: 32px 32px;
+  pointer-events:none; z-index:0;
+}
+
+/* ── Layout ── */
+.layout {
+  display: flex;
+  min-height: 100vh;
+  position: relative;
+  z-index:1;
+}
+
+/* ── Sidebar ── */
+nav {
+  width: 220px;
+  flex-shrink:0;
+  background: var(--bg2);
+  border-right: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  padding: 24px 0 40px;
+  display:flex;
+  flex-direction:column;
+}
+
+.nav-logo {
+  font-family: 'VT323', monospace;
+  font-size: 28px;
+  color: var(--green);
+  text-shadow: 0 0 18px rgba(0,255,153,0.6);
+  letter-spacing: 6px;
+  padding: 0 18px 20px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+}
+
+.nav-logo span { color: var(--cyan); }
+
+nav a {
+  display: block;
+  padding: 7px 18px;
+  color: var(--text-dim);
+  text-decoration: none;
+  font-size: 12px;
+  letter-spacing: 1px;
+  border-left: 2px solid transparent;
+  transition: all 0.15s;
+}
+
+nav a:hover, nav a.active {
+  color: var(--green);
+  border-left-color: var(--green);
+  background: rgba(0,255,153,0.05);
+}
+
+.nav-section {
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 3px;
+  padding: 14px 18px 4px;
+  opacity: 0.5;
+}
+
+/* ── Main content ── */
+main {
+  flex: 1;
+  padding: 40px 52px 80px;
+  max-width: 860px;
+}
+
+/* ── Header ── */
+.page-header {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 28px;
+  margin-bottom: 48px;
+}
+
+.page-header .eyebrow {
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 4px;
+  margin-bottom: 10px;
+}
+
+h1 {
+  font-family: 'VT323', monospace;
+  font-size: 58px;
+  color: var(--green);
+  text-shadow: 0 0 30px rgba(0,255,153,0.5);
+  letter-spacing: 8px;
+  line-height:1;
+}
+
+h1 span { color: var(--cyan); }
+
+.page-header .tagline {
+  margin-top: 10px;
+  color: var(--text-dim);
+  font-size: 13px;
+  letter-spacing: 1px;
+}
+
+.badge {
+  display: inline-block;
+  background: rgba(232,160,32,0.12);
+  border: 1px solid var(--amber);
+  color: var(--amber);
+  font-size: 10px;
+  letter-spacing: 2px;
+  padding: 2px 8px;
+  border-radius: 2px;
+  margin-top: 10px;
+}
+
+/* ── Section headings ── */
+h2 {
+  font-size: 18px;
+  color: var(--green);
+  letter-spacing: 3px;
+  margin: 44px 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+h2::before {
+  content: '▸';
+  color: var(--cyan);
+}
+
+h2::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+  margin-left: 10px;
+}
+
+h3 {
+  font-size: 14px;
+  color: var(--cyan);
+  letter-spacing: 2px;
+  margin: 24px 0 10px;
+}
+
+h3::before { content: '// '; color: var(--text-dim); }
+
+p {
+  color: var(--text);
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+/* ── Code blocks ── */
+.code-block {
+  background: var(--bg3);
+  border: 1px solid var(--border-c);
+  border-left: 3px solid var(--green);
+  border-radius: 3px;
+  padding: 16px 18px;
+  margin: 14px 0;
+  position: relative;
+  font-size: 13px;
+  line-height: 1.9;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.code-block .c  { color: var(--text-dim); }   /* comment */
+.code-block .g  { color: var(--green); }       /* command */
+.code-block .cy { color: var(--cyan); }        /* cyan accent */
+.code-block .am { color: var(--amber); }       /* flag/value */
+.code-block .rd { color: var(--red); }         /* warning/red */
+.code-block .wh { color: #e0f0e8; }            /* white value */
+
+.copy-btn {
+  position: absolute;
+  top: 10px; right: 10px;
+  background: transparent;
+  border: 1px solid var(--border-c);
+  color: var(--text-dim);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+  padding: 2px 7px;
+  letter-spacing: 1px;
+  cursor: pointer;
+  border-radius: 2px;
+  transition: all 0.2s;
+}
+.copy-btn:hover { color: var(--green); border-color: var(--green); }
+
+/* ── Tables ── */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 14px 0;
+  font-size: 12px;
+}
+
+th {
+  text-align: left;
+  color: var(--green);
+  letter-spacing: 2px;
+  font-size: 11px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-c);
+  background: rgba(0,255,153,0.04);
+}
+
+td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  vertical-align: top;
+}
+
+tr:hover td { background: rgba(0,255,153,0.03); }
+
+td:first-child { color: var(--cyan); white-space: nowrap; }
+
+td .desc { color: var(--text-dim); font-size: 12px; }
+
+/* ── Info boxes ── */
+.info {
+  background: rgba(0,255,153,0.05);
+  border-left: 3px solid var(--green);
+  padding: 12px 16px;
+  margin: 14px 0;
+  font-size: 12px;
+  border-radius: 0 3px 3px 0;
+}
+
+.info strong { color: var(--green); letter-spacing: 2px; display:block; margin-bottom:4px; font-size:10px; }
+
+.warn {
+  background: rgba(255,51,85,0.06);
+  border-left: 3px solid var(--red);
+  padding: 12px 16px;
+  margin: 14px 0;
+  font-size: 12px;
+  border-radius: 0 3px 3px 0;
+}
+
+.warn strong { color: var(--red); letter-spacing: 2px; display:block; margin-bottom:4px; font-size:10px; }
+
+.amber-box {
+  background: rgba(232,160,32,0.06);
+  border-left: 3px solid var(--amber);
+  padding: 12px 16px;
+  margin: 14px 0;
+  font-size: 12px;
+  border-radius: 0 3px 3px 0;
+}
+
+.amber-box strong { color: var(--amber); letter-spacing:2px; display:block; margin-bottom:4px; font-size:10px; }
+
+/* ── Process map ── */
+.process-map {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 18px 0;
+}
+
+.proc-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 12px 0;
+  border-left: 1px solid var(--border-c);
+  padding-left: 20px;
+  position: relative;
+}
+
+.proc-step::before {
+  content: '';
+  position: absolute;
+  left: -5px;
+  top: 18px;
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green);
+}
+
+.proc-num {
+  font-size: 10px;
+  color: var(--text-dim);
+  min-width: 24px;
+  padding-top: 2px;
+}
+
+.proc-body { flex: 1; }
+.proc-title { color: var(--green); font-size: 13px; margin-bottom: 3px; }
+.proc-desc { color: var(--text-dim); font-size: 12px; }
+
+/* ── Marquee banner (matches real cyon) ── */
+.marquee-strip {
+  background: var(--bg3);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 6px 0;
+  overflow: hidden;
+  margin: 40px -52px;
+}
+
+.marquee-inner {
+  display: inline-block;
+  white-space: nowrap;
+  animation: scroll-left 30s linear infinite;
+  color: var(--green);
+  font-size: 13px;
+  letter-spacing: 2px;
+}
+
+@keyframes scroll-left {
+  from { transform: translateX(100vw); }
+  to   { transform: translateX(-100%); }
+}
+
+/* ── Architecture diagram ── */
+.arch {
+  background: var(--bg3);
+  border: 1px solid var(--border-c);
+  border-radius: 3px;
+  padding: 22px;
+  margin: 14px 0;
+  font-size: 12px;
+  line-height: 2;
+}
+
+.arch .box {
+  display: inline-block;
+  border: 1px solid var(--green);
+  color: var(--green);
+  padding: 2px 10px;
+  border-radius: 2px;
+  font-size: 11px;
+  letter-spacing: 1px;
+}
+
+.arch .box.cyan { border-color: var(--cyan); color: var(--cyan); }
+.arch .box.amber { border-color: var(--amber); color: var(--amber); }
+.arch .arr { color: var(--text-dim); margin: 0 6px; }
+
+/* ── Footer ── */
+footer {
+  margin-top: 60px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 11px;
+  letter-spacing: 1px;
+}
+
+/* ── Responsive ── */
+@media (max-width: 720px) {
+  nav { display: none; }
+  main { padding: 24px 20px 60px; }
+  .marquee-strip { margin: 30px -20px; }
+}
+</style>
+</head>
+</style>
+</head>
+<body>
+<div class="layout">
+
+<nav>
+  <div class="nav-logo">▸ <span>C</span>YON</div>
+
+  <span class="nav-section">OVERVIEW</span>
+  <a href="#what">What is Cyon</a>
+  <a href="#structure">Project Structure</a>
+  <a href="#architecture">Architecture</a>
+
+  <span class="nav-section">DESKTOP</span>
+  <a href="#cyon-wm">cyon_wm</a>
+  <a href="#cyon-tty">cyon_tty</a>
+  <a href="#cyon-neo">cyon_neo</a>
+  <a href="#cyon-files">cyon_files</a>
+  <a href="#cyon-pixelart">cyon_pixelart</a>
+  <a href="#cyon-notes">cyon_notes</a>
+  <a href="#gtk-theme">GTK Theme System</a>
+  <a href="#cyon-about">cyon_about</a>
+
+  <span class="nav-section">TOOLS</span>
+  <a href="#cyon-editor">cyon_editor</a>
+  <a href="#cyon-world">cyon_world</a>
+  <a href="#pyra-lib">pyra_lib</a>
+  <a href="#gtk-lib">gtk_lib</a>
+
+  <span class="nav-section">AI + BOT</span>
+  <a href="#ollama">Ollama + AI</a>
+  <a href="#web">Web Dashboard</a>
+  <a href="#mcbot">Mineflayer Bot</a>
+
+  <span class="nav-section">PLUGINS</span>
+  <a href="#cyonscript">CyonScript</a>
+  <a href="#economy">Economy</a>
+  <a href="#ranking">Ranking</a>
+  <a href="#jobs">Jobs</a>
+  <a href="#landclaims">LandClaims</a>
+  <a href="#enchantments">Enchantments</a>
+  <a href="#other-plugins">Other Plugins</a>
+
+  <span class="nav-section">INSTALL</span>
+  <a href="#deps">Dependencies</a>
+  <a href="#build">Building</a>
+  <a href="#bashrc">⚠ .bashrc Guard</a>
+  <a href="#uninstall">Uninstall</a>
+</nav>
+
+<main>
+
+  <div class="page-header">
+    <div class="eyebrow">// DOCUMENTATION — v5.9</div>
+    <h1>▸ <span>C</span>YON</h1>
+    <p class="tagline">Desktop environment · Tool suite · Minecraft server platform · Scripting engine</p>
+    <div class="badge">⚠ ACTIVE DEVELOPMENT</div>
+  </div>
+
+  <section id="what">
+    <h2>What is Cyon</h2>
+    <p>Cyon is a hacker-themed desktop environment, Python tool suite, Minecraft server platform, and scripting engine — all built from scratch in C, Python, Java, and JavaScript. It runs a full X11 window manager, a VTE terminal with a live system visualizer, a pixel art editor, a video editor, a dual-pane file manager, a 3D launcher world, local AI, a Discord bot, a Flask web dashboard, a Mineflayer combat bot, and a complete suite of custom Paper plugins — including <strong>CyonScript</strong>, a programming language built into Minecraft books.</p>
+    <div class="info"><strong>// DESIGN PHILOSOPHY</strong>No bloat. No Electron. No cloud. No subscriptions. Compiled C binaries for the desktop layer, Python for scriptable tools, Java for the server, JavaScript for the bot. Everything runs on your machine. No data leaves. No snitching occurs.</div>
+  </section>
+
+  <section id="structure">
+    <h2>Project Structure</h2>
+    <div class="code-block">~/cyon/
+├── src/                  C source — WM, terminal, file manager, pixelart
+├── include/              C headers
+├── bin/                  compiled binaries
+├── pyra_lib/             Python utility library
+│   └── gtk_lib/          GTK-based Python GUI tools
+├── cyon_site/            Flask web dashboard
+├── cyon_world/           3D pygame launcher world (v3)
+├── minecraft_stuff/
+│   ├── mcbot/            Mineflayer combat bot (Node.js)
+│   └── cruxible_plugins/ Custom Paper plugins (Java / Maven)
+├── assets/
+│   ├── gtk.css           Global GTK3 cyan theme
+│   └── gtk_red.css       Global GTK3 red theme
+├── cyon_config/          Runtime config files
+├── compile_cyon          Build script (Bash)
+├── cyon_docs.html        Full HTML documentation (this file)
+├── README.md             Rendered in cyon_about
+└── Modelfile             Ollama Cyon persona</div>
+  </section>
+
+  <section id="architecture">
+    <h2>Architecture</h2>
+    <div class="arch">
+<span class="box">cyon_wm</span> <span class="arr">──── X11 window manager ────</span> <span class="box cyan">3 themes · 4 workspaces · menus · marquee</span>
+    │
+    ├─ <span class="box">cyon_neo</span>     <span class="arr">VTE terminal + NEO panel + CMD panel</span>
+    ├─ <span class="box">cyon_tty</span>     <span class="arr">native Cyon terminal — no external deps</span>
+    ├─ <span class="box">main_cyon_shell</span><span class="arr"> native Cyon shell</span>
+    ├─ <span class="box">cyon_files</span>   <span class="arr">dual-pane file manager</span>
+    ├─ <span class="box">cyon_pixelart</span><span class="arr"> pixel art editor + animator</span>
+    ├─ <span class="box">cyon_notes</span>   <span class="arr">notes editor + Piper TTS</span>
+    ├─ <span class="box">cyon_launch</span>  <span class="arr">fuzzy app launcher (Alt+Space)</span>
+    ├─ <span class="box">cyon_wifi</span>    <span class="arr">GTK wifi manager</span>
+    └─ <span class="box">main_cyon</span>    <span class="arr">GTK control panel → Ollama · Discord bot</span>
+
+<span class="box amber">gtk.css</span> <span class="arr">─── ~/.config/gtk-3.0/gtk.css ─── themes all GTK3 apps globally</span>
+
+<span class="box cyan">pyra_lib/gtk_lib/</span>  <span class="arr">cyon_editor · cyon_player · cyon_matrix · cyon_about · ...</span>
+<span class="box cyan">cyon_world/</span>        <span class="arr">3D pygame first-person launcher world</span>
+<span class="box cyan">cyon_site/app.py</span>   <span class="arr">Flask web dashboard (LAN, port 5000)</span>
+<span class="box cyan">mcbot/bot.js</span>       <span class="arr">Mineflayer combat bot (Node.js + Ollama)</span>
+
+<span class="box amber">cruxible_plugins/</span>
+    ├─ <span class="box">CruxibleBooks</span>  <span class="arr">CyonScript engine — scripting language in books</span>
+    ├─ <span class="box">Economy</span>        <span class="arr">sign shops · balance · shopkeepers</span>
+    ├─ <span class="box">Ranking</span>        <span class="arr">rank ladder · /rankup</span>
+    ├─ <span class="box">Jobs</span>           <span class="arr">6 job classes · XP · pay multipliers</span>
+    ├─ <span class="box">LandClaims</span>     <span class="arr">golden shovel claims · particle borders · trust</span>
+    ├─ <span class="box">Enchantments</span>   <span class="arr">9 custom enchantments · Economy cost</span>
+    ├─ <span class="box">Board</span>          <span class="arr">live sidebar: balance · rank · job · HP · coords</span>
+    └─ <span class="box">...</span>             <span class="arr">TPA · Homes · Kits · Repair · Lifesteal · ChatLink · Map · Help</span></div>
+  </section>
+
+  <div class="marquee-strip"><span class="marquee-inner">// CYON_WM — THREE THEMES — VTE TERMINAL — NEO PANEL — CMD PANEL — GTK THEME — PIXEL ART — VIDEO EDITOR — 3D WORLD — CYONSCRIPT — WIRELESS REDSTONE — ECONOMY — RANKING — JOBS — LAND CLAIMS — LOCAL AI — NO CLOUD — NO SNITCHING //</span></div>
+
+  <!-- ══════════════════════════════════════════════════════════ DESKTOP -->
+
+  <section id="cyon-wm">
+    <h2>cyon_wm — Window Manager</h2>
+    <p>Minimal X11 reparenting window manager written in C. Start from LightDM session select, <code>startx</code>, or inside Xephyr for testing. Manages all other Cyon tools from its dropdown menus.</p>
+
+    <h3>Themes</h3>
+    <p>Three built-in themes cycle live — green → ember → cyon — via <strong>[ SYSTEM ] → Toggle Theme</strong>. No restart needed.</p>
+    <table>
+      <tr><th>Theme</th><th>Primary Color</th><th>Background</th><th>Compile Flag</th></tr>
+      <tr><td>cyon</td><td style="color:#00ffd5">#00ffd5 cyan</td><td>Deep navy</td><td>default</td></tr>
+      <tr><td>green</td><td style="color:#00ff99">#00ff99 green</td><td>Near-black</td><td><code>-DTHEME_GREEN</code></td></tr>
+      <tr><td>ember</td><td style="color:#ff8c00">#ff8c00 amber</td><td>Black</td><td><code>-DTHEME_EMBER</code></td></tr>
+    </table>
+    <p>Runtime override: <code>cyon_wm --theme ember</code></p>
+
+    <h3>Key Bindings (MOD = Alt)</h3>
+    <table>
+      <tr><th>Key</th><th>Action</th></tr>
+      <tr><td>Mod+Enter</td><td>Open terminal (cyon_neo)</td></tr>
+      <tr><td>Mod+Space</td><td>App launcher (cyon_launch) — fuzzy search over .desktop apps</td></tr>
+      <tr><td>Mod+Q</td><td>Close focused window</td></tr>
+      <tr><td>Mod+Shift+E</td><td>Quit the WM</td></tr>
+      <tr><td>Mod+W / Mod+Shift+W</td><td>Next / previous wallpaper (scans <code>~/cyon/assets/cyon_pics/</code>)</td></tr>
+      <tr><td>Mod+1 / 2 / 3 / 4</td><td>Switch workspace</td></tr>
+      <tr><td>Mod+Shift+1-4</td><td>Send focused window to workspace</td></tr>
+      <tr><td>Mod+G</td><td>Ghost window (hide from panel, keep running)</td></tr>
+      <tr><td>Mod+drag</td><td>Move window</td></tr>
+      <tr><td>Mod+right-drag</td><td>Resize window</td></tr>
+      <tr><td>Volume Up/Down/Mute</td><td>Media keys (XF86)</td></tr>
+    </table>
+
+    <h3>Panels</h3>
+    <p><strong>Top panel</strong> — four dropdown menus: <code>[ ACCESS ]</code>, <code>[ NODES ]</code>, <code>[ SYSTEM ]</code>, <code>[ PROGRAMS ]</code>. Scrolling marquee in the centre. Clock on the right. Menus animate with a streaming glitch effect on open.</p>
+    <p><strong>Bottom panel</strong> — workspace buttons (1–4), open window list per workspace, clock.</p>
+
+    <h3>access.conf</h3>
+    <p>Customize the ACCESS dropdown: <code>~/cyon/cyon_config/access.conf</code></p>
+    <div class="code-block">Web Browser    firefox
+Steam          steam
+Discord        discord
+---
+GIMP           gimp
+<span class="c"># Format: Label&lt;tab&gt;command. --- draws separator. Restart WM to reload.</span></div>
+
+    <h3>Building</h3>
+    <div class="code-block"><span class="c"># Default (cyon theme)</span>
+gcc -Iinclude src/cyon_wm.c src/cyon_theme.c src/cyon_notify.c \
+    src/cyon_wallpaper.c src/cyon_menu.c -o bin/cyon_wm -lX11 -lpng -lm
+
+<span class="c"># Or: compile_cyon option 2</span></div>
+  </section>
+
+  <section id="cyon-neo">
+    <h2>cyon_neo — Terminal + NEO Panel</h2>
+    <p>Full VTE terminal (same widget as gnome-terminal) with a live system visualization panel on the left and a programmable quick-command panel on the right. Real PTY — your prompt, colours, history, Ctrl+C/D/Z, tab completion, and nested terminals all work natively.</p>
+
+    <h3>Layout</h3>
+    <div class="code-block">[ ◀ NEO | FULL CAP | REGION CAP | CYON // TTY | spacer | CMD ▶ ]
+[ NEO panel ] | [      VTE Terminal      ] | [ CMD panel ]</div>
+
+    <h3>NEO Panel (left)</h3>
+    <table>
+      <tr><th>Element</th><th>Details</th></tr>
+      <tr><td>3D cube</td><td>Rotating wireframe. Spin speed and color (cyan → blue-white) scales with RAM load.</td></tr>
+      <tr><td>RAM readout</td><td>Live GB used / total</td></tr>
+      <tr><td>Clock</td><td>Click to toggle 12h / 24h</td></tr>
+      <tr><td>Notes</td><td>Type directly. Right-click: Cut/Copy/Paste. Auto-saves every 4s to <code>cyon_neo.txt</code></td></tr>
+    </table>
+
+    <h3>NEO Bottom Buttons</h3>
+    <table>
+      <tr><th>Button</th><th>Action</th></tr>
+      <tr><td>CLEAR</td><td>Clear terminal screen</td></tr>
+      <tr><td>TOP</td><td>Launch htop (falls back to top)</td></tr>
+      <tr><td>COPY</td><td>Copy terminal selection to clipboard</td></tr>
+      <tr><td>PASTE</td><td>Paste clipboard into terminal</td></tr>
+      <tr><td>FONT +</td><td>Increase VTE font size live</td></tr>
+      <tr><td>FONT −</td><td>Decrease VTE font size live</td></tr>
+    </table>
+
+    <h3>Terminal Right-Click Menu</h3>
+    <p>Right-click anywhere on the terminal: <strong>Copy · Paste · Clear · htop/top · Font+ · Font−</strong></p>
+
+    <h3>CMD Panel (right)</h3>
+    <p>Resizable via pane divider. Up to 8 programmable buttons. Edit via <strong>✎ EDIT CMDS</strong>. Config: <code>~/cyon/cyon_config/cyon_neo_buttons.conf</code></p>
+    <div class="code-block"><span class="c"># cyon_neo_buttons.conf — Label|command, one per line</span>
+HTOP|htop
+LOGS|tail -f /var/log/syslog
+GIT STATUS|git status
+PYTHON|python3
+SERVER|ssh user@192.168.1.100</div>
+
+    <h3>Key Bindings</h3>
+    <table>
+      <tr><th>Key</th><th>Action</th></tr>
+      <tr><td>Tab (empty entry)</td><td>Toggle NEO ↔ terminal focus</td></tr>
+      <tr><td>Ctrl+N</td><td>Focus NEO panel</td></tr>
+      <tr><td>Ctrl+T</td><td>Focus terminal</td></tr>
+    </table>
+
+    <h3>Building</h3>
+    <div class="code-block"><span class="c"># Requires libvte-2.91-dev</span>
+sudo apt install libvte-2.91-dev
+
+gcc $(pkg-config --cflags gtk+-3.0 vte-2.91) src/cyon_neo.c \
+    $(pkg-config --libs gtk+-3.0 vte-2.91) -lm -lutil -o bin/cyon_neo
+
+<span class="c"># Or: compile_cyon option 6</span></div>
+  </section>
+
+  <section id="cyon-tty">
+    <h2>cyon_tty — Native Terminal</h2>
+    <p><code>bin/cyon_tty</code> — Cyon's own terminal emulator. No external terminal dependencies. Ships as a compiled binary alongside cyon_neo for situations where a lightweight, self-contained terminal is preferred.</p>
+    <p>Launched from <strong>[ PROGRAMS ]</strong> in the cyon_wm menu or directly from the command line.</p>
+    <div class="code-block">./compile_cyon  # option 4</div>
+    <div class="amber-box"><strong>// NOTE</strong> cyon_neo remains the primary terminal (VTE + NEO panel + CMD panel). cyon_tty is the stripped-down standalone option.</div>
+  </section>
+
+  <section id="cyon-files">
+    <h2>cyon_files — File Manager</h2>
+    <p>Dual-pane GTK file manager. Registered as system default for <code>inode/directory</code>. Non-blocking copy/move with live progress.</p>
+    <table>
+      <tr><th>Key</th><th>Action</th></tr>
+      <tr><td>Tab</td><td>Switch active pane</td></tr>
+      <tr><td>Enter</td><td>Open file or folder</td></tr>
+      <tr><td>Backspace</td><td>Go up one directory</td></tr>
+      <tr><td>Delete</td><td>Delete selected (with confirm)</td></tr>
+      <tr><td>F2</td><td>Rename selected</td></tr>
+      <tr><td>Ctrl+C / X / V</td><td>Copy / Cut / Paste</td></tr>
+      <tr><td>Ctrl+N</td><td>New folder</td></tr>
+      <tr><td>Ctrl+T</td><td>Open terminal in current directory</td></tr>
+      <tr><td>Ctrl+H</td><td>Toggle hidden files</td></tr>
+      <tr><td>Ctrl+R</td><td>Refresh</td></tr>
+      <tr><td>Right-click</td><td>Context menu</td></tr>
+    </table>
+  </section>
+
+  <section id="cyon-pixelart">
+    <h2>cyon_pixelart — Pixel Art Editor</h2>
+    <p>GTK pixel art editor with animation timeline, palette management, zoom/pan, undo/redo, and PNG export. Palette color buttons use the <code>.color-btn</code> CSS class and are explicitly excluded from the global GTK theme — your paint colors always display correctly regardless of which theme is active.</p>
+    <div class="code-block">gcc -Iinclude src/pixel_buffer.c src/data.c src/widgets.c src/canvas.c src/window.c \
+    -o bin/cyon_pixelart $(pkg-config --cflags --libs gtk+-3.0) -lm
+<span class="c"># Or: compile_cyon option 7</span></div>
+  </section>
+
+  <section id="cyon-notes">
+    <h2>cyon_notes — Notes + TTS</h2>
+    <p>GTK notes editor integrated with Piper text-to-speech. Registered as default for common text MIME types (plain text, C, markdown, Python, shell scripts, logs).</p>
+    <div class="code-block">gcc $(pkg-config --cflags gtk+-3.0) -o bin/cyon_notes src/cyon_notes.c \
+    $(pkg-config --libs gtk+-3.0) -lpthread
+<span class="c"># Or: compile_cyon option 5</span></div>
+  </section>
+
+  <section id="gtk-theme">
+    <h2>GTK3 Theme System</h2>
+    <p><code>~/.config/gtk-3.0/gtk.css</code> themes every GTK3 app on the system — menus, buttons, file dialogs, scrollbars, text views, combo boxes, notebooks — to match the cyon palette. Two variants ship in <code>assets/</code>:</p>
+    <table>
+      <tr><th>File</th><th>Primary</th><th>Background</th><th>Install</th></tr>
+      <tr><td>gtk.css</td><td style="color:#00ffd5">#00ffd5 cyan</td><td>#080c10 deep navy</td><td>Option 15</td></tr>
+      <tr><td>gtk_red.css</td><td style="color:#ff4422">#ff4422 red</td><td>#0e0808 dark red</td><td>Option 16</td></tr>
+    </table>
+    <div class="code-block"><span class="c"># Manual install</span>
+mkdir -p ~/.config/gtk-3.0
+cp assets/gtk.css ~/.config/gtk-3.0/gtk.css
+<span class="c"># Takes effect on next app launch — no restart needed</span></div>
+    <div class="info"><strong>// CUSTOM THEME</strong>Edit only the <code>@define-color</code> variables at the top of gtk.css. 15 color variables control everything — backgrounds, borders, accents, hover states, text. The rest of the file just references them.</div>
+    <div class="amber-box"><strong>// PALETTE BUTTONS</strong>cyon_pixelart palette buttons are explicitly excluded via <code>.color-btn</code> CSS class. Your chosen paint colors always display correctly regardless of the active GTK theme.</div>
+  </section>
+
+  <section id="cyon-about">
+    <h2>cyon_about — About Window</h2>
+    <p><code>pyra_lib/gtk_lib/cyon_about.py</code> — tabbed GTK window opened from <strong>[ SYSTEM ] → About Cyon</strong>.</p>
+    <table>
+      <tr><th>Tab</th><th>Content</th></tr>
+      <tr><td>help</td><td>Full WM keybinding reference, cyon_files keys, access.conf format guide</td></tr>
+      <tr><td>readme</td><td>Renders <code>~/cyon/README.md</code> live — headings, bullets, code blocks, horizontal rules</td></tr>
+    </table>
+    <p>A <strong>[ docs ]</strong> button opens <code>cyon_docs.html</code> in the browser. ESC closes the window.</p>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════════ TOOLS -->
+
+  <section id="cyon-editor">
+    <h2>cyon_editor — Video Editor</h2>
+    <p><code>pyra_lib/gtk_lib/cyon_editor.py</code> — GTK3 video editor powered by GStreamer and ffmpeg.</p>
+    <table>
+      <tr><th>Feature</th><th>Details</th></tr>
+      <tr><td>Playback</td><td>GStreamer playbin, frame-accurate seek</td></tr>
+      <tr><td>Waveform</td><td>Audio decoded via ffmpeg at 800Hz, rendered in timeline. Cyan inside trim zone, dim outside.</td></tr>
+      <tr><td>Trim</td><td>Draggable IN/OUT handles. Green = IN, orange = OUT.</td></tr>
+      <tr><td>Export</td><td>H.264 / H.265 / VP9 / stream copy. CRF quality, resolution scale, audio bitrate.</td></tr>
+      <tr><td>Audio extract</td><td>WAV, MP3, FLAC, AAC, OGG with trim support</td></tr>
+      <tr><td>Snapshot</td><td>Current frame to PNG via ffmpeg</td></tr>
+      <tr><td>Speed</td><td>0.25x – 2.0x with preset buttons</td></tr>
+    </table>
+    <table>
+      <tr><th>Key</th><th>Action</th></tr>
+      <tr><td>Space</td><td>Play / Pause</td></tr>
+      <tr><td>S</td><td>Stop</td></tr>
+      <tr><td>← / →</td><td>Step one frame backward / forward</td></tr>
+      <tr><td>I / O</td><td>Set trim IN / OUT at current position</td></tr>
+      <tr><td>C</td><td>Clear trim points</td></tr>
+      <tr><td>M</td><td>Toggle mute</td></tr>
+      <tr><td>E</td><td>Extract audio (opens dialog)</td></tr>
+      <tr><td>P</td><td>Frame snapshot to PNG</td></tr>
+      <tr><td>+ / -</td><td>Speed up / slow down</td></tr>
+    </table>
+    <div class="code-block">source ~/pyra_env/bin/activate
+python3 pyra_lib/gtk_lib/cyon_editor.py</div>
+  </section>
+
+  <section id="cyon-world">
+    <h2>cyon_world — 3D Launcher</h2>
+    <p><code>cyon_world/cyon_world_main_v3.py</code> — first-person 3D pygame world. Walk up to holographic beacons and press E to open a GUI and launch Cyon tools. Shooting range included.</p>
+    <table>
+      <tr><th>Control</th><th>Action</th></tr>
+      <tr><td>WASD</td><td>Move</td></tr>
+      <tr><td>Mouse</td><td>Look</td></tr>
+      <tr><td>E</td><td>Interact with beacon (open launcher GUI)</td></tr>
+      <tr><td>RMB</td><td>Shoot targets</td></tr>
+      <tr><td>Tab</td><td>Free mouse</td></tr>
+      <tr><td>F11</td><td>Fullscreen</td></tr>
+      <tr><td>ESC</td><td>Close GUI / quit</td></tr>
+    </table>
+  </section>
+
+  <section id="pyra-lib">
+    <h2>pyra_lib — CLI Tools</h2>
+    <p>All tools run inside <code>~/pyra_env</code>. Activate: <code>source ~/pyra_env/bin/activate</code></p>
+    <table>
+      <tr><th>Tool</th><th>Description</th></tr>
+      <tr><td>ascii_art.py</td><td>ASCII art generator (pyfiglet)</td></tr>
+      <tr><td>binary_tools.py</td><td>Binary / hex / bit manipulation</td></tr>
+      <tr><td>conversions.py</td><td>Unit and format conversions</td></tr>
+      <tr><td>file_encryptor.py</td><td>AES file encryption / decryption</td></tr>
+      <tr><td>find_duplicates.py</td><td>Duplicate file finder</td></tr>
+      <tr><td>image_converter.py</td><td>Batch image format conversion</td></tr>
+      <tr><td>figlet_tools.py</td><td>Figlet font tools</td></tr>
+      <tr><td>csv2json.py / convertcsv.py</td><td>CSV ↔ JSON conversion</td></tr>
+      <tr><td>mem_scan.py</td><td>Live memory usage scanner (rich)</td></tr>
+      <tr><td>moon.py</td><td>Moon phase display</td></tr>
+      <tr><td>net_stress.py</td><td>Network stress tester</td></tr>
+      <tr><td>pyra_repeater.py</td><td>Command repeater / scheduler</td></tr>
+      <tr><td>theban.py</td><td>Theban script encoder / decoder</td></tr>
+      <tr><td>wifi.py</td><td>WiFi tools</td></tr>
+      <tr><td>cybrmsc.py</td><td>Audio synthesis (scipy)</td></tr>
+      <tr><td>tarmaker.py</td><td>CLI tar.gz creator</td></tr>
+      <tr><td>shift_image.py</td><td>Image pixel shift effect</td></tr>
+      <tr><td>convert_webp.py / convert_mvk.py</td><td>Format converters</td></tr>
+    </table>
+  </section>
+
+  <section id="gtk-lib">
+    <h2>gtk_lib — GUI Tools</h2>
+    <table>
+      <tr><th>Tool</th><th>Description</th></tr>
+      <tr><td>cyon_editor.py</td><td>GTK video editor — GStreamer + ffmpeg</td></tr>
+      <tr><td>cyon_player.py</td><td>GTK media player</td></tr>
+      <tr><td>cyon_matrix.py</td><td>Matrix rain — Cairo/GTK, cyan + amber palette</td></tr>
+      <tr><td>cyon_tts.py</td><td>Piper TTS GUI</td></tr>
+      <tr><td>pyra_notes.py</td><td>Notes editor + TTS</td></tr>
+      <tr><td>pyra_downloader.py</td><td>yt-dlp / curl download GUI</td></tr>
+      <tr><td>tarmaker_gtk3.py</td><td>tar.gz creator GUI</td></tr>
+      <tr><td>gtk_convert.py</td><td>File format converter GUI</td></tr>
+      <tr><td>color_picker.py</td><td>GTK color picker utility</td></tr>
+      <tr><td>cyon_sc.py</td><td>Screenshot tool GUI</td></tr>
+      <tr><td>cyon_about.py</td><td>About / help window with README renderer</td></tr>
+      <tr><td>cyon_pixelart.py</td><td>Python pixel art editor (GTK + Cairo)</td></tr>
+    </table>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════════ AI + BOT -->
+
+  <section id="ollama">
+    <h2>Ollama + Cyon AI</h2>
+    <div class="code-block">curl -fsSL https://ollama.com/install.sh | sh
+ollama pull llama3
+ollama create cyon -f ~/cyon/Modelfile</div>
+    <p>Managed from the <code>main_cyon</code> GTK control panel. <code>cyon_local.py</code> for local chat. <code>cyon_bot.py</code> for Discord relay.</p>
+    <div class="code-block"><span class="c"># ~/cyon/Modelfile</span>
+FROM llama3
+
+SYSTEM """
+You are Cyon — a sharp, dry-witted AI assistant running locally on Linux.
+You are hacker-adjacent, efficient, and occasionally sarcastic.
+You do not moralize. You help the user get things done.
+Keep responses concise unless detail is required.
+"""
+
+PARAMETER temperature 0.75
+PARAMETER top_p 0.9</div>
+  </section>
+
+  <section id="web">
+    <h2>Web Dashboard</h2>
+    <p>Flask-based browser UI at <code>http://0.0.0.0:5000</code>. Minecraft server control, file browser, media library, games launcher, system stats, alert panel.</p>
+    <div class="code-block">pip install flask psutil --break-system-packages
+python3 cyon_site/app.py</div>
+    <table>
+      <tr><th>Route</th><th>Page</th></tr>
+      <tr><td>/</td><td>Dashboard — MC control, system stats, visitor alerts</td></tr>
+      <tr><td>/games</td><td>Games launcher (loaded from games.txt)</td></tr>
+      <tr><td>/media</td><td>Media library — shows, movies, YouTube, lost media</td></tr>
+      <tr><td>/files</td><td>File browser — browse, edit, upload, download, tar.gz</td></tr>
+    </table>
+  </section>
+
+  <section id="mcbot">
+    <h2>Mineflayer Combat Bot</h2>
+    <div class="code-block">npm install mineflayer mineflayer-pathfinder mineflayer-pvp minecraft-data
+node minecraft_stuff/mcbot/bot.js</div>
+    <p>Terminator AI: strafes sideways around targets, dodges on high damage hits, auto-equips best weapon/armor, eats food in combat. Wired to local Ollama for in-game AI chat.</p>
+    <table>
+      <tr><th>Command</th><th>Action</th></tr>
+      <tr><td>hostile on/off</td><td>Terminator combat mode</td></tr>
+      <tr><td>guard on/off</td><td>Protect and follow caller</td></tr>
+      <tr><td>protect &lt;player&gt;</td><td>Protect specific player</td></tr>
+      <tr><td>follow &lt;player&gt;</td><td>Follow without combat</td></tr>
+      <tr><td>mine on/off</td><td>Auto ore mining</td></tr>
+      <tr><td>drop &lt;player&gt; &lt;item&gt;</td><td>Walk to player and drop item</td></tr>
+      <tr><td>status</td><td>HP, food, current mode</td></tr>
+      <tr><td>inventory</td><td>List carried items</td></tr>
+      <tr><td>!ask &lt;question&gt;</td><td>Ask Cyon AI (Ollama)</td></tr>
+      <tr><td>!forget</td><td>Clear AI conversation history</td></tr>
+      <tr><td>!ai status</td><td>Test Ollama connection</td></tr>
+    </table>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════════ PLUGINS -->
+
+  <section id="cyonscript">
+    <h2>CruxibleBooks — CyonScript</h2>
+    <p>The flagship plugin. CyonScript is a programming language written inside Minecraft books and executed as server commands. Scripts are saved as <code>.txt</code> files, loaded back as written books, and can run manually, on a schedule, or triggered by physical blocks anywhere in the world.</p>
+
+    <h3>Commands</h3>
+    <table>
+      <tr><th>Command</th><th>Description</th></tr>
+      <tr><td>/exportbook [name]</td><td>Save held written book to file (default: .txt, any extension supported)</td></tr>
+      <tr><td>/importbook &lt;name&gt;</td><td>Load a saved script as a written book</td></tr>
+      <tr><td>/listbooks</td><td>List all saved script files</td></tr>
+      <tr><td>/runbook [player]</td><td>Execute held book. Ops can run as any player.</td></tr>
+      <tr><td>/sendbook &lt;player&gt;</td><td>Send book as bottle message — delivers on login if offline</td></tr>
+      <tr><td>/mailbox</td><td>Check and collect pending bottle messages</td></tr>
+      <tr><td>/linkblock &lt;book&gt; [op]</td><td>Link looked-at block (button/plate/lever) to a script</td></tr>
+      <tr><td>/unlinkblock</td><td>Unlink looked-at block</td></tr>
+      <tr><td>/listlinks</td><td>Show all linked blocks</td></tr>
+      <tr><td>/cyfihere &lt;n&gt; [cooldown &lt;s&gt;]</td><td>Register looked-at block as a named CyFi signal point</td></tr>
+      <tr><td>/cyfipoint add/remove/list</td><td>Manage CyFi points by coordinates</td></tr>
+    </table>
+
+    <h3>Language — Instructions</h3>
+    <div class="code-block">say &lt;text&gt;              <span class="c"># broadcast to all players</span>
+msg &lt;text&gt;              <span class="c"># send message to yourself</span>
+cmd &lt;command&gt;           <span class="c"># run as player</span>
+opcmd &lt;command&gt;         <span class="c"># run as console (op-signed book + op runner)</span>
+tp &lt;x&gt; &lt;y&gt; &lt;z&gt;          <span class="c"># teleport</span>
+give &lt;item&gt; [amount]    <span class="c"># give item to self</span>
+drop &lt;player&gt; &lt;item&gt;    <span class="c"># drop item at player feet</span>
+wait &lt;ticks&gt;            <span class="c"># pause — 20 ticks = 1 second</span>
+repeat &lt;n&gt; &lt;instruction&gt;<span class="c"># repeat up to 100 times</span>
+cyfi &lt;point&gt; on|off|pulse [ticks]  <span class="c"># fire wireless redstone signal</span></div>
+
+    <h3>Language — Variables + Math</h3>
+    <div class="code-block"><span class="c"># Built-in variables</span>
+{player}   {world}   {x}   {y}   {z}   {health}   {food}
+
+<span class="c"># Custom variables and math</span>
+set total 50
+set half {total} / 2        <span class="c"># operators: + - * / %</span>
+give diamond {half}         <span class="c"># math works anywhere a number is expected</span>
+tp {x} + 10 {y} {z}        <span class="c"># including inside coordinates</span>
+wait {total} * 20</div>
+
+    <h3>Language — Control Flow</h3>
+    <div class="code-block"><span class="c"># if / else / endif  —  operators: == != &gt; &lt; &gt;= &lt;=</span>
+if {health} &lt; 10
+say Low HP!
+else
+say HP ok
+endif
+
+<span class="c"># while / endwhile  —  capped at 100 iterations</span>
+set x 5
+while {x} &gt; 0
+say countdown: {x}
+set x {x} - 1
+endwhile
+
+<span class="c"># for / endfor  —  optional step</span>
+for i 1 to 10 step 2
+say {i}
+endfor
+
+# this is a comment</div>
+
+    <h3>CyFi — Wireless Redstone</h3>
+    <p>Register named trigger points anywhere on the map. CyonScript fires them remotely — no physical wire needed. Players have cooldowns; ops bypass them.</p>
+    <div class="code-block"><span class="c"># Op: look at empty block next to your mechanism</span>
+/cyfihere lights cooldown 5
+
+<span class="c"># In your script:</span>
+cyfi lights pulse 20
+
+<span class="c"># Link to a button anywhere on the map:</span>
+/linkblock lights_script
+<span class="c"># Anyone clicking that button fires the script, which triggers the mechanism.</span></div>
+
+    <h3>Scheduled Scripts</h3>
+    <div class="code-block"><span class="c"># config.yml — runs scripts at set times every day</span>
+scheduled-books:
+  - book: daily_news
+    time: "08:00"
+  - book: night_warn
+    time: "20:00"</div>
+
+    <h3>Permissions</h3>
+    <table>
+      <tr><th>Permission</th><th>Default</th><th>Description</th></tr>
+      <tr><td>cruxiblebooks.*</td><td>op</td><td>Full access</td></tr>
+      <tr><td>cruxiblebooks.export/import/list/run</td><td>op</td><td>Core script operations</td></tr>
+      <tr><td>cruxiblebooks.opcmd</td><td>op</td><td>Use opcmd instruction</td></tr>
+      <tr><td>cruxiblebooks.linkblock</td><td>op</td><td>Link/unlink blocks</td></tr>
+      <tr><td>cruxiblebooks.triggerblock</td><td>true</td><td>Trigger linked blocks</td></tr>
+      <tr><td>cruxiblebooks.cyfipoint</td><td>op</td><td>Manage CyFi points</td></tr>
+      <tr><td>cruxiblebooks.cyfi</td><td>true</td><td>Use cyfi in scripts</td></tr>
+      <tr><td>cruxiblebooks.sendbook / mailbox</td><td>true</td><td>Bottle messages</td></tr>
+    </table>
+  </section>
+
+  <section id="economy">
+    <h2>CruxibleEconomy + Shopkeepers</h2>
+    <p>Sign-based shop economy. Place a chest with a sign attached:</p>
+    <div class="code-block">[shop]
+diamond
+100.0
+50.0
+<span class="c"># Line 1: [shop] tag. Line 2: item. Line 3: buy price. Line 4: sell price.</span></div>
+    <p>Players click the sign to buy or sell. Balances stored in config. Integrates with Board, Jobs, Ranking, and Enchantments.</p>
+    <p><strong>Commands:</strong> <code>/balance</code> · <code>/pay &lt;player&gt; &lt;amount&gt;</code> · <code>/setbalance</code> · <code>/addbalance</code></p>
+  </section>
+
+  <section id="ranking">
+    <h2>CruxibleRanking</h2>
+    <p>Configurable rank ladder. Ranks defined in <code>config.yml</code> with display name, prefix, and Economy cost. Players pay to rank up. Rank shown on CruxibleBoard sidebar.</p>
+    <p><strong>Commands:</strong> <code>/rank</code> · <code>/ranks</code> · <code>/setrank &lt;player&gt; &lt;rank&gt;</code> · <code>/rankup</code></p>
+  </section>
+
+  <section id="jobs">
+    <h2>CruxibleJobs</h2>
+    <p>Six job classes with XP tracking and pay multipliers that scale with level. Each job earns Economy currency from its relevant actions.</p>
+    <table>
+      <tr><th>Job</th><th>Icon</th><th>Earns from</th></tr>
+      <tr><td>Miner</td><td>⛏</td><td>Breaking stone and ore</td></tr>
+      <tr><td>Farmer</td><td>🌾</td><td>Harvesting crops</td></tr>
+      <tr><td>Hunter</td><td>⚔</td><td>Killing mobs</td></tr>
+      <tr><td>Lumberjack</td><td>🪵</td><td>Chopping trees</td></tr>
+      <tr><td>Fisherman</td><td>🎣</td><td>Catching fish</td></tr>
+      <tr><td>Builder</td><td>🧱</td><td>Placing blocks</td></tr>
+    </table>
+    <p>Pay multipliers: 1.0x (lvl 1-4) → 1.1x (5-14) → 1.2x (15-24) → 1.35x (25-29) → higher at 30+</p>
+  </section>
+
+  <section id="landclaims">
+    <h2>CruxibleLandClaims v2.1</h2>
+    <p>Golden Shovel land claiming. Click two corners to define a rectangular region.</p>
+    <table>
+      <tr><th>Feature</th><th>Details</th></tr>
+      <tr><td>Particle borders</td><td>Hold the shovel: all nearby claims draw particle borders every 2s. Gold=yours, Red=other, Green=trusted.</td></tr>
+      <tr><td>Gold block corners</td><td>Physical gold blocks placed at claim corners on creation, removed on unclaim. Protected from breaking.</td></tr>
+      <tr><td>/claimsee</td><td>Toggle border display without holding the shovel</td></tr>
+      <tr><td>Trust levels</td><td>Container, Builder, Manager</td></tr>
+    </table>
+    <p><strong>Commands:</strong> <code>/claim</code> · <code>/unclaim</code> · <code>/trust &lt;player&gt;</code> · <code>/untrust</code> · <code>/claimlist</code> · <code>/claimsee</code></p>
+  </section>
+
+  <section id="enchantments">
+    <h2>CruxibleEnchantments</h2>
+    <p>Custom enchantments purchasable with Economy currency via <code>/cruxible give &lt;enchant&gt; &lt;level&gt;</code>.</p>
+    <table>
+      <tr><th>Enchantment</th><th>Tool</th><th>Description</th></tr>
+      <tr><td>Tunnel Vision</td><td>Pickaxe</td><td>Mines 3×3 tunnel in facing direction</td></tr>
+      <tr><td>Auto Smelt</td><td>Pickaxe</td><td>Smelts ores on break</td></tr>
+      <tr><td>Vein Breaker I-III</td><td>Pickaxe</td><td>Breaks entire ore veins (up to 64 blocks)</td></tr>
+      <tr><td>Green Thumb</td><td>Hoe</td><td>Auto-replants harvested crops</td></tr>
+      <tr><td>Night Vision</td><td>Helmet</td><td>Permanent night vision while worn</td></tr>
+      <tr><td>Knockback X I-X</td><td>Sword</td><td>Launches enemies into orbit</td></tr>
+      <tr><td>Water Breathing</td><td>Helmet</td><td>Breathe underwater indefinitely</td></tr>
+      <tr><td>Speed Boost I-III</td><td>Boots</td><td>Increased movement speed</td></tr>
+      <tr><td>Life Steal I-III</td><td>Sword</td><td>Heal on hit</td></tr>
+    </table>
+  </section>
+
+  <section id="other-plugins">
+    <h2>Other Plugins</h2>
+    <table>
+      <tr><th>Plugin</th><th>Description</th></tr>
+      <tr><td>CruxiblePowers</td><td>Drop named item to activate special abilities. Particle effects, cooldowns.</td></tr>
+      <tr><td>CruxibleHomes</td><td><code>/sethome &lt;n&gt;</code> · <code>/home &lt;n&gt;</code> · <code>/homes</code> · <code>/delhome &lt;n&gt;</code></td></tr>
+      <tr><td>CruxibleKits</td><td>Configurable item kits with cooldowns. <code>/kit &lt;n&gt;</code></td></tr>
+      <tr><td>CruxibleRepair</td><td><code>/repair</code> fixes held item. <code>/repair all</code> fixes everything. Economy cost configurable.</td></tr>
+      <tr><td>CruxibleLifesteal</td><td>Players drop hearts on death. Collect them to steal max HP permanently.</td></tr>
+      <tr><td>CruxibleTPA</td><td><code>/tpa</code> · <code>/tpaccept</code> · <code>/tpdeny</code> · <code>/tpahere</code>. Configurable timeout.</td></tr>
+      <tr><td>CruxibleBoard</td><td>Live sidebar: balance, rank + prefix, job + level, HP, food, coordinates. Hooks Economy + Ranking + Jobs.</td></tr>
+      <tr><td>CruxibleChatLink v2</td><td>Minecraft ↔ Discord chat bridge. Java plugin + discord_bot.py via local HTTP relay.</td></tr>
+      <tr><td>CruxibleMap</td><td>Custom in-game map viewer command.</td></tr>
+      <tr><td>CruxibleHelp</td><td>Configurable <code>/help</code> replacement. Pages and entries defined in config.yml.</td></tr>
+    </table>
+
+    <h3>Building Plugins</h3>
+    <div class="code-block">cd minecraft_stuff/cruxible_plugins
+./build_plugins.sh
+<span class="c"># Builds all plugins via Maven. JARs go in each plugin's target/ directory.</span>
+<span class="c"># Copy to your Paper server's plugins/ folder.</span></div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════════ INSTALL -->
+
+  <section id="deps">
+    <h2>Dependencies</h2>
+    <p>All installed automatically by <code>compile_cyon</code> option 1. Manual:</p>
+    <div class="code-block"><span class="c"># C / GTK / VTE</span>
+sudo apt install -y build-essential libgtk-3-dev <span class="am">libvte-2.91-dev</span> \
+    pkg-config curl yt-dlp ffmpeg scrot xclip
+
+<span class="c"># cyon_wm</span>
+sudo apt install -y libx11-dev libpng-dev xorg xinit
+
+<span class="c"># Python</span>
+sudo apt install -y python3-gi python3-gi-cairo gir1.2-gtk-3.0 python3-venv nodejs npm</div>
+    <table>
+      <tr><th>Package</th><th>Purpose</th></tr>
+      <tr><td>libvte-2.91-dev</td><td><strong>Required for cyon_neo.</strong> VTE terminal widget.</td></tr>
+      <tr><td>libgtk-3-dev</td><td>GTK 3 headers — entire GUI layer</td></tr>
+      <tr><td>libx11-dev / libpng-dev</td><td>cyon_wm — X11 and wallpaper PNG loading</td></tr>
+      <tr><td>scrot</td><td>Screenshots in cyon_neo toolbar</td></tr>
+      <tr><td>xclip</td><td>Clipboard support</td></tr>
+      <tr><td>ffmpeg</td><td>Video processing for cyon_editor</td></tr>
+    </table>
+  </section>
+
+  <section id="build">
+    <h2>Building (compile_cyon)</h2>
+    <div class="code-block">chmod +x compile_cyon && ./compile_cyon</div>
+    <table>
+      <tr><th>Option</th><th>Description</th></tr>
+      <tr><td>1</td><td>Install all apt deps + compile everything + setup pyra_env</td></tr>
+      <tr><td>2</td><td>cyon_wm + cyon_sc + cyon_launch + cyon_files <span class="desc">(also installs cyan GTK theme)</span></td></tr>
+      <tr><td>3</td><td>cyon desktop apps (main_cyon, notes, neo, 3d, pixelart)</td></tr>
+      <tr><td>4</td><td>cyon_shell / cyon_tty / main_cyon_shell</td></tr>
+      <tr><td>5</td><td>cyon_notes</td></tr>
+      <tr><td>6</td><td>cyon_neo</td></tr>
+      <tr><td>7</td><td>cyon_pixelart</td></tr>
+      <tr><td>8</td><td>Setup pyra_env + Piper TTS + voice models</td></tr>
+      <tr><td>9</td><td>Compile pyra_toolz</td></tr>
+      <tr><td>10</td><td>Compile pyra_termux</td></tr>
+      <tr><td>11</td><td>Add Cyon/Pyra PATH to ~/.bashrc</td></tr>
+      <tr><td>12</td><td>Setup Piper voices only</td></tr>
+      <tr><td>13</td><td>Remove cyon_shell</td></tr>
+      <tr><td>14</td><td>Remove Pyra PATH from ~/.bashrc</td></tr>
+      <tr><td style="color:var(--green)">15</td><td><strong>Install GTK theme — Cyan</strong></td></tr>
+      <tr><td style="color:var(--cyan)">16</td><td><strong>Install GTK theme — Red</strong></td></tr>
+      <tr><td style="color:var(--red)">17</td><td>Uninstall Cyon</td></tr>
+      <tr><td>0</td><td>Exit</td></tr>
+    </table>
+  </section>
+
+  <section id="bashrc">
+    <h2>⚠ .bashrc Guard</h2>
+    <p>cyon_neo sets <code>CYON_NEO=1</code> before sourcing <code>.bashrc</code>. If your <code>.bashrc</code> launches an interactive program — a menu, cyon_cli, a custom loop — wrap it:</p>
+    <div class="warn"><strong>// WITHOUT THIS GUARD</strong>Opening a terminal inside cyon_neo will recurse. The shell loops until it freezes. Add the guard once and it never happens again.</div>
+    <div class="code-block"><span class="g">if</span> [ -z <span class="am">"$CYON_NEO"</span> ]; then
+    <span class="c"># your interactive menu / cyon_cli launch / program here</span>
+<span class="g">fi</span>
+<span class="c"># Everything outside the if block runs normally in both contexts</span></div>
+  </section>
+
+  <section id="uninstall">
+    <h2>Uninstall</h2>
+    <p>Select option <strong>17</strong> from <code>compile_cyon</code>. Removes: desktop launchers, <code>~/pyra_env</code>, GTK theme (restores backup), Pyra PATH from <code>~/.bashrc</code>, and the entire <code>~/cyon/</code> directory.</p>
+    <div class="warn"><strong>// CANNOT BE UNDONE</strong>Complete removal. The uninstaller asks once. It means it.</div>
+    <div class="code-block"><span class="c"># apt packages are NOT removed automatically</span>
+sudo apt remove build-essential libgtk-3-dev libvte-2.91-dev pkg-config yt-dlp ffmpeg</div>
+  </section>
+
+  <footer>
+    // CYON v5.9 — no cloud · no Electron · no regrets (maybe one) · built in C · themed in cyan · CyonScript inside
+  </footer>
+
+</main>
+</div>
+
+<script>
+const sections = document.querySelectorAll('section[id]');
+const navLinks = document.querySelectorAll('nav a');
+window.addEventListener('scroll', () => {
+  let current = '';
+  sections.forEach(s => { if (window.scrollY >= s.offsetTop - 80) current = s.id; });
+  navLinks.forEach(a => a.classList.toggle('active', a.getAttribute('href') === '#' + current));
+});
+document.querySelectorAll('.code-block').forEach(block => {
+  const btn = document.createElement('button');
+  btn.className = 'copy-btn'; btn.textContent = 'COPY';
+  btn.onclick = () => {
+    navigator.clipboard.writeText(block.innerText.replace('COPY','').trim());
+    btn.textContent = 'OK';
+    setTimeout(() => btn.textContent = 'COPY', 1500);
+  };
+  block.appendChild(btn);
+});
+</script>
+</body>
+</html>
